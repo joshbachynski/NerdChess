@@ -46,11 +46,20 @@ export default function Home() {
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
-    const move = makeAMove({
+    // Attempt move without promotion first (for normal moves)
+    let move = makeAMove({
       from: sourceSquare,
       to: targetSquare,
-      promotion: "q", // always promote to queen for simplicity
     });
+
+    // If that failed, try with promotion to queen (for pawn promotion moves)
+    if (move === null) {
+      move = makeAMove({
+        from: sourceSquare,
+        to: targetSquare,
+        promotion: "q",
+      });
+    }
 
     if (move === null) return false;
 

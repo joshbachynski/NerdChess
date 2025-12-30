@@ -8,7 +8,8 @@ import { toast } from "@/hooks/use-toast";
 import bgImage from "@assets/generated_images/dark_abstract_glass_waves_background.png";
 
 export default function Home() {
-  const [game, setGame] = useState(new Chess());
+  const [game] = useState(() => new Chess());
+  const [fen, setFen] = useState(game.fen());
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
   
   // Responsive board width
@@ -31,34 +32,47 @@ export default function Home() {
 
   function makeAMove(move: any) {
     try {
-      const gameCopy = new Chess(game.fen());
-      const result = gameCopy.move(move);
-      setGame(gameCopy);
+      console.log("Attempting move:", move);
+      const result = game.move(move);
+      console.log("Move result:", result);
+      setFen(game.fen());
       
       if (result) {
         setMoveHistory(prev => [...prev, result.san]);
         return result;
       }
     } catch (error) {
+      console.error("Move error:", error);
       return null;
     }
     return null;
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
+    console.log("onDrop:", sourceSquare, targetSquare);
+    
     // Attempt move without promotion first (for normal moves)
-    let move = makeAMove({
-      from: sourceSquare,
-      to: targetSquare,
-    });
-
-    // If that failed, try with promotion to queen (for pawn promotion moves)
-    if (move === null) {
+    let move = null;
+    try {
       move = makeAMove({
         from: sourceSquare,
         to: targetSquare,
-        promotion: "q",
       });
+    } catch (e) {
+      // ignore
+    }
+
+    // If that failed, try with promotion to queen (for pawn promotion moves)
+    if (move === null) {
+      try {
+        move = makeAMove({
+          from: sourceSquare,
+          to: targetSquare,
+          promotion: "q",
+        });
+      } catch (e) {
+        // ignore
+      }
     }
 
     if (move === null) return false;
@@ -92,7 +106,8 @@ export default function Home() {
   }
 
   function resetGame() {
-    setGame(new Chess());
+    game.reset();
+    setFen(game.fen());
     setMoveHistory([]);
     toast({
       title: "Game Reset",
@@ -173,7 +188,7 @@ export default function Home() {
         <div className="order-1 lg:order-2 shadow-2xl shadow-black/50 rounded-lg overflow-hidden ring-1 ring-white/10">
           {/* @ts-ignore */}
           <Chessboard 
-            position={game.fen()} 
+            position={fen} 
             onPieceDrop={onDrop}
             boardWidth={boardWidth}
             customDarkSquareStyle={{ backgroundColor: '#334155' }} // Slate-700

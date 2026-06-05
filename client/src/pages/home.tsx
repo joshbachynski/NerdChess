@@ -110,19 +110,54 @@ function generateBoard(): { active: string[]; board: BoardState } {
   return { active: cells, board };
 }
 
+const STORAGE_KEY = 'nerd-chess-state';
+
+function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null } | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.active) && parsed.board && typeof parsed.board === 'object') {
+      return {
+        active: parsed.active,
+        board: parsed.board,
+        currentTurn: parsed.currentTurn === 'black' ? 'black' : 'white',
+        winner: parsed.winner === 'white' || parsed.winner === 'black' ? parsed.winner : null,
+      };
+    }
+  } catch {
+    // ignore corrupted state
+  }
+  return null;
+}
+
 export default function Home() {
-  const [initState] = useState(() => generateBoard());
+  const [initState] = useState(() => {
+    const saved = loadSavedState();
+    if (saved) return saved;
+    const g = generateBoard();
+    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null };
+  });
   const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
   const [board, setBoard] = useState<BoardState>(initState.board);
   const [draggedPiece, setDraggedPiece] = useState<{ piece: PieceType; from: Square } | null>(null);
-  const [currentTurn, setCurrentTurn] = useState<'white' | 'black'>('white');
+  const [currentTurn, setCurrentTurn] = useState<'white' | 'black'>(initState.currentTurn);
   const [boardWidth, setBoardWidth] = useState(500);
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [winner, setWinner] = useState<'white' | 'black' | null>(null);
+  const [winner, setWinner] = useState<'white' | 'black' | null>(initState.winner);
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeSet = new Set(activeSquares);
+
+  // Persist game state so a page reload / hot-reload never loses the game
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner }));
+    } catch {
+      // ignore storage failures
+    }
+  }, [activeSquares, board, currentTurn, winner]);
 
   useEffect(() => {
     return () => {

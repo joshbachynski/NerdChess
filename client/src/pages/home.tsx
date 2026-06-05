@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Swords, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
+import { RotateCcw, Swords, Shuffle, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import bgImage from "@assets/generated_images/dark_abstract_glass_waves_background.png";
 
 type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P' | 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
-type Square = string;
+type Square = string; // "row,col"
 
 interface BoardState {
   [square: string]: PieceType[];
@@ -39,20 +39,15 @@ const PIECE_STATS: { [key: string]: { attack: number; defense: number; name: str
   'k': { attack: 6, defense: 2, name: 'King' },
 };
 
-const INITIAL_POSITION: BoardState = {
-  a8: ['r'], b8: ['n'], c8: ['b'], d8: ['q'], e8: ['k'], f8: ['b'], g8: ['n'], h8: ['r'],
-  a7: ['p'], b7: ['p'], c7: ['p'], d7: ['p'], e7: ['p'], f7: ['p'], g7: ['p'], h7: ['p'],
-  a2: ['P'], b2: ['P'], c2: ['P'], d2: ['P'], e2: ['P'], f2: ['P'], g2: ['P'], h2: ['P'],
-  a1: ['R'], b1: ['N'], c1: ['B'], d1: ['Q'], e1: ['K'], f1: ['B'], g1: ['N'], h1: ['R'],
-};
-
 const PIECE_UNICODE: { [key in PieceType]: string } = {
   'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
   'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟',
 };
 
-const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
+const GRID_SIZE = 10;
+
+const BLACK_BACK: PieceType[] = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
+const WHITE_BACK: PieceType[] = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
 
 const DiceIcon = ({ value }: { value: number }) => {
   const icons = [Dice1, Dice2, Dice3, Dice4, Dice5, Dice6];
@@ -62,13 +57,70 @@ const DiceIcon = ({ value }: { value: number }) => {
 
 const isWhitePiece = (piece: PieceType) => piece === piece.toUpperCase();
 
+// Grow a random connected blob of squares
+function generateShape(): string[] {
+  const active = new Set<string>();
+  const startR = Math.floor(GRID_SIZE / 2);
+  const startC = Math.floor(GRID_SIZE / 2);
+  active.add(`${startR},${startC}`);
+
+  const target = 46 + Math.floor(Math.random() * 18); // 46-63 cells
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  let guard = 0;
+
+  while (active.size < target && guard < 8000) {
+    guard++;
+    const cells = Array.from(active);
+    const [r, c] = cells[Math.floor(Math.random() * cells.length)].split(',').map(Number);
+    const [dr, dc] = dirs[Math.floor(Math.random() * 4)];
+    const nr = r + dr;
+    const nc = c + dc;
+    if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
+      active.add(`${nr},${nc}`);
+    }
+  }
+
+  return Array.from(active);
+}
+
+// Generate a random board shape with armies placed on it
+function generateBoard(): { active: string[]; board: BoardState } {
+  const cells = generateShape();
+
+  // Sort top-to-bottom, left-to-right
+  cells.sort((a, b) => {
+    const [ra, ca] = a.split(',').map(Number);
+    const [rb, cb] = b.split(',').map(Number);
+    return ra - rb || ca - cb;
+  });
+
+  const board: BoardState = {};
+
+  // Black army occupies the topmost squares
+  const blackCells = cells.slice(0, 16);
+  blackCells.slice(0, 8).forEach((cell, i) => { board[cell] = [BLACK_BACK[i]]; });
+  blackCells.slice(8, 16).forEach((cell) => { board[cell] = ['p']; });
+
+  // White army occupies the bottommost squares
+  const whitePawnCells = cells.slice(-16, -8);
+  const whiteBackCells = cells.slice(-8);
+  whitePawnCells.forEach((cell) => { board[cell] = ['P']; });
+  whiteBackCells.forEach((cell, i) => { board[cell] = [WHITE_BACK[i]]; });
+
+  return { active: cells, board };
+}
+
 export default function Home() {
-  const [board, setBoard] = useState<BoardState>(() => JSON.parse(JSON.stringify(INITIAL_POSITION)));
+  const [initState] = useState(() => generateBoard());
+  const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
+  const [board, setBoard] = useState<BoardState>(initState.board);
   const [draggedPiece, setDraggedPiece] = useState<{ piece: PieceType; from: Square } | null>(null);
   const [currentTurn, setCurrentTurn] = useState<'white' | 'black'>('white');
   const [boardWidth, setBoardWidth] = useState(500);
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+
+  const activeSet = new Set(activeSquares);
 
   useEffect(() => {
     function handleResize() {
@@ -78,10 +130,10 @@ export default function Home() {
         setBoardWidth(560);
       }
     }
-    
+
     window.addEventListener("resize", handleResize);
     handleResize();
-    
+
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
@@ -90,16 +142,15 @@ export default function Home() {
   const resolveCombat = (attacker: PieceType, defender: PieceType, from: Square, to: Square): CombatResult => {
     const attackerStats = PIECE_STATS[attacker];
     const defenderStats = PIECE_STATS[defender];
-    
+
     const attackRoll = rollD6();
     const defenseRoll = rollD6();
-    
+
     const attackSucceeds = attackRoll <= attackerStats.attack;
     const defenseSucceeds = defenseRoll <= defenderStats.defense;
-    
-    // Defender wins if they succeed, attacker only wins if they succeed AND defender fails
+
     const attackerWins = attackSucceeds && !defenseSucceeds;
-    
+
     return {
       attacker,
       defender,
@@ -116,20 +167,18 @@ export default function Home() {
   const applyCombatResult = useCallback((result: CombatResult) => {
     setBoard(prev => {
       const newBoard = { ...prev };
-      
+
       if (result.attackerWins) {
-        // Attacker wins: remove attacker from source, remove defender, place attacker at target
+        // Remove attacker from source
         if (newBoard[result.from]) {
           const pieceIndex = newBoard[result.from].indexOf(result.attacker);
           if (pieceIndex > -1) {
             newBoard[result.from] = [...newBoard[result.from]];
             newBoard[result.from].splice(pieceIndex, 1);
-            if (newBoard[result.from].length === 0) {
-              delete newBoard[result.from];
-            }
+            if (newBoard[result.from].length === 0) delete newBoard[result.from];
           }
         }
-        
+
         // Remove defender from target
         if (newBoard[result.to]) {
           const defenderIndex = newBoard[result.to].indexOf(result.defender);
@@ -138,45 +187,39 @@ export default function Home() {
             newBoard[result.to].splice(defenderIndex, 1);
           }
         }
-        
+
         // Place attacker at target
-        if (!newBoard[result.to]) {
-          newBoard[result.to] = [];
-        } else {
-          newBoard[result.to] = [...newBoard[result.to]];
-        }
+        if (!newBoard[result.to]) newBoard[result.to] = [];
+        else newBoard[result.to] = [...newBoard[result.to]];
         newBoard[result.to].push(result.attacker);
-        
+
       } else {
-        // Defender wins: remove attacker from source (attacker is destroyed)
+        // Defender wins: attacker is destroyed
         if (newBoard[result.from]) {
           const pieceIndex = newBoard[result.from].indexOf(result.attacker);
           if (pieceIndex > -1) {
             newBoard[result.from] = [...newBoard[result.from]];
             newBoard[result.from].splice(pieceIndex, 1);
-            if (newBoard[result.from].length === 0) {
-              delete newBoard[result.from];
-            }
+            if (newBoard[result.from].length === 0) delete newBoard[result.from];
           }
         }
       }
-      
+
       return newBoard;
     });
-    
+
     setCurrentTurn(prev => prev === 'white' ? 'black' : 'white');
-    
-    // Show toast with result
+
     const attackerName = PIECE_STATS[result.attacker].name;
     const defenderName = PIECE_STATS[result.defender].name;
-    
+
     toast({
       title: result.attackerWins ? `${attackerName} captures ${defenderName}!` : `${defenderName} defends!`,
-      description: result.attackerWins 
-        ? `Attack roll ${result.attackRoll} (needed ≤${result.attackNeeded}) succeeded, Defense roll ${result.defenseRoll} (needed ≤${result.defenseNeeded}) failed`
-        : `Defense roll ${result.defenseRoll} (needed ≤${result.defenseNeeded}) succeeded!`,
+      description: result.attackerWins
+        ? `Attack ${result.attackRoll} (≤${result.attackNeeded}) hit, Defense ${result.defenseRoll} (≤${result.defenseNeeded}) failed`
+        : `Defense roll ${result.defenseRoll} (≤${result.defenseNeeded}) held the line!`,
     });
-    
+
     setCombatResult(null);
     setIsAnimating(false);
   }, []);
@@ -196,59 +239,45 @@ export default function Home() {
   const handleDrop = useCallback((e: React.DragEvent, targetSquare: Square) => {
     e.preventDefault();
     if (isAnimating) return;
-    
+
     const data = e.dataTransfer.getData('text/plain');
     if (!data) return;
-    
+
     const [piece, fromSquare] = data.split('|') as [PieceType, Square];
-    
+
     if (fromSquare === targetSquare) return;
 
     const targetPieces = board[targetSquare] || [];
-    
-    // Check if there's an enemy piece at target
     const enemyPiece = targetPieces.find(p => isWhitePiece(p) !== isWhitePiece(piece));
-    
+
     if (enemyPiece) {
-      // Combat!
       setIsAnimating(true);
       const result = resolveCombat(piece, enemyPiece, fromSquare, targetSquare);
       setCombatResult(result);
-      
-      // Auto-resolve after animation
-      setTimeout(() => {
-        applyCombatResult(result);
-      }, 2000);
-      
+      setTimeout(() => applyCombatResult(result), 2000);
     } else {
-      // Normal move (no combat)
       setBoard(prev => {
         const newBoard = { ...prev };
-        
+
         if (newBoard[fromSquare]) {
           const pieceIndex = newBoard[fromSquare].indexOf(piece);
           if (pieceIndex > -1) {
             newBoard[fromSquare] = [...newBoard[fromSquare]];
             newBoard[fromSquare].splice(pieceIndex, 1);
-            if (newBoard[fromSquare].length === 0) {
-              delete newBoard[fromSquare];
-            }
+            if (newBoard[fromSquare].length === 0) delete newBoard[fromSquare];
           }
         }
-        
-        if (!newBoard[targetSquare]) {
-          newBoard[targetSquare] = [];
-        } else {
-          newBoard[targetSquare] = [...newBoard[targetSquare]];
-        }
+
+        if (!newBoard[targetSquare]) newBoard[targetSquare] = [];
+        else newBoard[targetSquare] = [...newBoard[targetSquare]];
         newBoard[targetSquare].push(piece);
-        
+
         return newBoard;
       });
 
       setCurrentTurn(prev => prev === 'white' ? 'black' : 'white');
     }
-    
+
     setDraggedPiece(null);
   }, [board, isAnimating, applyCombatResult]);
 
@@ -256,21 +285,23 @@ export default function Home() {
     setDraggedPiece(null);
   }, []);
 
-  const resetGame = () => {
-    setBoard(JSON.parse(JSON.stringify(INITIAL_POSITION)));
+  const regenerate = () => {
+    const { active, board: newBoard } = generateBoard();
+    setActiveSquares(active);
+    setBoard(newBoard);
     setCurrentTurn('white');
     setCombatResult(null);
     setIsAnimating(false);
     toast({
-      title: "Game Reset",
-      description: "New game started.",
+      title: "New Battlefield",
+      description: "A fresh randomized board has been generated.",
     });
   };
 
-  const squareSize = boardWidth / 8;
+  const squareSize = boardWidth / GRID_SIZE;
 
   return (
-    <div 
+    <div
       className="min-h-screen w-full flex items-center justify-center p-4 lg:p-8 bg-background relative overflow-hidden"
       style={{
         backgroundImage: `url(${bgImage})`,
@@ -285,13 +316,12 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <Card className="glass-card p-8 text-white border-white/10 max-w-md w-full mx-4 animate-in zoom-in-95 duration-300">
             <h2 className="text-2xl font-display font-bold text-center mb-6">Combat!</h2>
-            
+
             <div className="flex items-center justify-between gap-4">
-              {/* Attacker */}
               <div className="flex-1 text-center">
                 <div className="text-6xl mb-2">{PIECE_UNICODE[combatResult.attacker]}</div>
                 <div className="text-sm text-white/60 mb-2">{PIECE_STATS[combatResult.attacker].name}</div>
-                <div className="text-xs text-white/40 mb-3">Attack: {combatResult.attackNeeded}+</div>
+                <div className="text-xs text-white/40 mb-3">Attack: ≤{combatResult.attackNeeded}</div>
                 <div className={`inline-flex items-center justify-center p-2 rounded-lg ${
                   combatResult.attackRoll <= combatResult.attackNeeded ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                 }`}>
@@ -301,14 +331,13 @@ export default function Home() {
                   {combatResult.attackRoll <= combatResult.attackNeeded ? '✓ Hit!' : '✗ Miss'}
                 </div>
               </div>
-              
+
               <div className="text-4xl text-white/30">⚔️</div>
-              
-              {/* Defender */}
+
               <div className="flex-1 text-center">
                 <div className="text-6xl mb-2">{PIECE_UNICODE[combatResult.defender]}</div>
                 <div className="text-sm text-white/60 mb-2">{PIECE_STATS[combatResult.defender].name}</div>
-                <div className="text-xs text-white/40 mb-3">Defense: {combatResult.defenseNeeded}+</div>
+                <div className="text-xs text-white/40 mb-3">Defense: ≤{combatResult.defenseNeeded}</div>
                 <div className={`inline-flex items-center justify-center p-2 rounded-lg ${
                   combatResult.defenseRoll <= combatResult.defenseNeeded ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                 }`}>
@@ -319,12 +348,12 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            
+
             <div className={`mt-6 text-center text-xl font-bold ${
               combatResult.attackerWins ? 'text-red-400' : 'text-green-400'
             }`}>
-              {combatResult.attackerWins 
-                ? `${PIECE_STATS[combatResult.attacker].name} wins!` 
+              {combatResult.attackerWins
+                ? `${PIECE_STATS[combatResult.attacker].name} wins!`
                 : `${PIECE_STATS[combatResult.defender].name} survives!`}
             </div>
           </Card>
@@ -332,7 +361,7 @@ export default function Home() {
       )}
 
       <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row gap-8 items-center lg:items-start justify-center">
-        
+
         {/* Game Info Panel */}
         <div className="w-full max-w-md space-y-4 order-2 lg:order-1">
           <Card className="glass-card p-6 space-y-6 text-white border-white/10">
@@ -341,7 +370,7 @@ export default function Home() {
                 Nerd Chess
               </h1>
               <p className="text-white/60 font-light text-sm">
-                Dice-based combat like Axis & Allies
+                Dice combat on a randomized battlefield
               </p>
             </div>
 
@@ -361,7 +390,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Stats Reference */}
             <div className="space-y-2 text-xs">
               <div className="text-white/60 font-semibold uppercase tracking-wider">Piece Stats (Atk/Def)</div>
               <div className="grid grid-cols-2 gap-1 text-white/50">
@@ -377,39 +405,59 @@ export default function Home() {
               </div>
             </div>
 
-            <Button 
-              onClick={resetGame} 
-              variant="outline" 
-              className="w-full bg-white/5 border-white/10 hover:bg-white/10 hover:text-white transition-all"
-              data-testid="button-reset"
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Reset Board
-            </Button>
+            <div className="space-y-2">
+              <Button
+                onClick={regenerate}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all font-semibold"
+                data-testid="button-new-shape"
+              >
+                <Shuffle className="w-4 h-4 mr-2" />
+                New Random Shape
+              </Button>
+              <Button
+                onClick={regenerate}
+                variant="outline"
+                className="w-full bg-white/5 border-white/10 hover:bg-white/10 hover:text-white transition-all"
+                data-testid="button-reset"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Reset Board
+              </Button>
+            </div>
           </Card>
         </div>
 
         {/* Chess Board */}
-        <div 
-          className="order-1 lg:order-2 shadow-2xl shadow-black/50 rounded-lg overflow-hidden ring-1 ring-white/10"
+        <div
+          className="order-1 lg:order-2 relative"
           style={{ width: boardWidth, height: boardWidth }}
           data-testid="chessboard"
         >
-          <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
-            {RANKS.map(rank => 
-              FILES.map(file => {
-                const square = `${file}${rank}`;
+          <div
+            className="grid w-full h-full"
+            style={{
+              gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
+              gridTemplateRows: `repeat(${GRID_SIZE}, 1fr)`,
+            }}
+          >
+            {Array.from({ length: GRID_SIZE }).map((_, r) =>
+              Array.from({ length: GRID_SIZE }).map((_, c) => {
+                const square = `${r},${c}`;
+                const isActive = activeSet.has(square);
+
+                if (!isActive) {
+                  return <div key={square} style={{ width: squareSize, height: squareSize }} />;
+                }
+
                 const pieces = board[square] || [];
-                const fileIndex = FILES.indexOf(file);
-                const rankIndex = RANKS.indexOf(rank);
-                const isLight = (fileIndex + rankIndex) % 2 === 0;
-                
+                const isLight = (r + c) % 2 === 0;
+
                 return (
                   <div
                     key={square}
                     className={`relative flex items-center justify-center select-none ${
                       isLight ? 'bg-slate-400' : 'bg-slate-700'
-                    } ${draggedPiece ? 'cursor-pointer' : ''}`}
+                    } shadow-inner ${draggedPiece ? 'cursor-pointer' : ''}`}
                     style={{ width: squareSize, height: squareSize }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, square)}
@@ -425,7 +473,7 @@ export default function Home() {
                           isWhitePiece(piece) ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : 'text-black drop-shadow-[0_2px_4px_rgba(255,255,255,0.3)]'
                         } ${isAnimating ? 'pointer-events-none' : ''}`}
                         style={{
-                          fontSize: squareSize * 0.7,
+                          fontSize: squareSize * 0.68,
                           lineHeight: 1,
                           zIndex: 10 + index,
                           transform: pieces.length > 1 ? `translate(${index * 4}px, ${index * -4}px)` : undefined,
@@ -435,17 +483,6 @@ export default function Home() {
                         {PIECE_UNICODE[piece]}
                       </div>
                     ))}
-                    
-                    {file === 'a' && (
-                      <span className="absolute top-0.5 left-1 text-xs font-mono opacity-50 text-white/70">
-                        {rank}
-                      </span>
-                    )}
-                    {rank === '1' && (
-                      <span className="absolute bottom-0.5 right-1 text-xs font-mono opacity-50 text-white/70">
-                        {file}
-                      </span>
-                    )}
                   </div>
                 );
               })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Swords, Shuffle, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
@@ -119,8 +119,16 @@ export default function Home() {
   const [boardWidth, setBoardWidth] = useState(500);
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [winner, setWinner] = useState<'white' | 'black' | null>(null);
+  const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeSet = new Set(activeSquares);
+
+  useEffect(() => {
+    return () => {
+      if (combatTimeoutRef.current) clearTimeout(combatTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     function handleResize() {
@@ -220,16 +228,26 @@ export default function Home() {
         : `Defense roll ${result.defenseRoll} (≤${result.defenseNeeded}) held the line!`,
     });
 
+    // Win condition: a King was captured/destroyed in this combat
+    const isKing = (p: PieceType) => p === 'K' || p === 'k';
+    if (result.attackerWins && isKing(result.defender)) {
+      // The defending King died -> the attacker's side wins
+      setWinner(isWhitePiece(result.attacker) ? 'white' : 'black');
+    } else if (!result.attackerWins && isKing(result.attacker)) {
+      // The attacking King died -> the defender's side wins
+      setWinner(isWhitePiece(result.attacker) ? 'black' : 'white');
+    }
+
     setCombatResult(null);
     setIsAnimating(false);
   }, []);
 
   const handleDragStart = useCallback((e: React.DragEvent, square: Square, piece: PieceType) => {
-    if (isAnimating) return;
+    if (isAnimating || winner) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', `${piece}|${square}`);
     setDraggedPiece({ piece, from: square });
-  }, [isAnimating]);
+  }, [isAnimating, winner]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -238,7 +256,7 @@ export default function Home() {
 
   const handleDrop = useCallback((e: React.DragEvent, targetSquare: Square) => {
     e.preventDefault();
-    if (isAnimating) return;
+    if (isAnimating || winner) return;
 
     const data = e.dataTransfer.getData('text/plain');
     if (!data) return;
@@ -254,7 +272,10 @@ export default function Home() {
       setIsAnimating(true);
       const result = resolveCombat(piece, enemyPiece, fromSquare, targetSquare);
       setCombatResult(result);
-      setTimeout(() => applyCombatResult(result), 2000);
+      combatTimeoutRef.current = setTimeout(() => {
+        combatTimeoutRef.current = null;
+        applyCombatResult(result);
+      }, 2000);
     } else {
       setBoard(prev => {
         const newBoard = { ...prev };
@@ -279,19 +300,24 @@ export default function Home() {
     }
 
     setDraggedPiece(null);
-  }, [board, isAnimating, applyCombatResult]);
+  }, [board, isAnimating, winner, applyCombatResult]);
 
   const handleDragEnd = useCallback(() => {
     setDraggedPiece(null);
   }, []);
 
   const regenerate = () => {
+    if (combatTimeoutRef.current) {
+      clearTimeout(combatTimeoutRef.current);
+      combatTimeoutRef.current = null;
+    }
     const { active, board: newBoard } = generateBoard();
     setActiveSquares(active);
     setBoard(newBoard);
     setCurrentTurn('white');
     setCombatResult(null);
     setIsAnimating(false);
+    setWinner(null);
     toast({
       title: "New Battlefield",
       description: "A fresh randomized board has been generated.",
@@ -310,6 +336,29 @@ export default function Home() {
       }}
     >
       <div className="absolute inset-0 bg-background/40 backdrop-blur-sm z-0" />
+
+      {/* Victory Modal */}
+      {winner && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md">
+          <Card className="glass-card p-10 text-white border-white/10 max-w-md w-full mx-4 text-center animate-in zoom-in-95 duration-300">
+            <div className="text-7xl mb-4">{winner === 'white' ? '♔' : '♚'}</div>
+            <h2 className="text-4xl font-display font-bold mb-2">
+              {winner === 'white' ? 'White' : 'Black'} Wins!
+            </h2>
+            <p className="text-white/60 mb-8">
+              The enemy King has fallen. Victory is decided.
+            </p>
+            <Button
+              onClick={regenerate}
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90 transition-all font-semibold"
+              data-testid="button-play-again"
+            >
+              <Shuffle className="w-4 h-4 mr-2" />
+              Play Again
+            </Button>
+          </Card>
+        </div>
+      )}
 
       {/* Combat Modal */}
       {combatResult && (
@@ -466,7 +515,7 @@ export default function Home() {
                     {pieces.map((piece, index) => (
                       <div
                         key={`${piece}-${index}`}
-                        draggable={!isAnimating}
+                        draggable={!isAnimating && !winner}
                         onDragStart={(e) => handleDragStart(e, square, piece)}
                         onDragEnd={handleDragEnd}
                         className={`absolute cursor-grab active:cursor-grabbing transition-transform hover:scale-110 ${

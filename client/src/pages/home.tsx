@@ -12,7 +12,7 @@ interface BoardState {
   [square: string]: PieceType[];
 }
 
-type CombatOutcome = 'capture' | 'repelled_destroyed' | 'repelled_retreat';
+type CombatOutcome = 'capture' | 'repelled_destroyed' | 'embattled';
 
 interface CombatResult {
   attacker: PieceType;
@@ -115,7 +115,7 @@ function generateBoard(): { active: string[]; board: BoardState } {
 
 const STORAGE_KEY = 'nerd-chess-state';
 
-function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null } | null {
+function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null; embattled: string[] } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -126,6 +126,7 @@ function loadSavedState(): { active: string[]; board: BoardState; currentTurn: '
         board: parsed.board,
         currentTurn: parsed.currentTurn === 'black' ? 'black' : 'white',
         winner: parsed.winner === 'white' || parsed.winner === 'black' ? parsed.winner : null,
+        embattled: Array.isArray(parsed.embattled) ? parsed.embattled : [],
       };
     }
   } catch {
@@ -139,7 +140,7 @@ export default function Home() {
     const saved = loadSavedState();
     if (saved) return saved;
     const g = generateBoard();
-    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null };
+    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null, embattled: [] as string[] };
   });
   const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
   const [board, setBoard] = useState<BoardState>(initState.board);
@@ -149,18 +150,24 @@ export default function Home() {
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [winner, setWinner] = useState<'white' | 'black' | null>(initState.winner);
+  const [embattled, setEmbattled] = useState<string[]>(initState.embattled);
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Always-fresh snapshot of the board for use inside delayed combat callbacks
+  const boardRef = useRef(board);
+  useEffect(() => { boardRef.current = board; }, [board]);
+
   const activeSet = new Set(activeSquares);
+  const embattledSet = new Set(embattled);
 
   // Persist game state so a page reload / hot-reload never loses the game
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled }));
     } catch {
       // ignore storage failures
     }
-  }, [activeSquares, board, currentTurn, winner]);
+  }, [activeSquares, board, currentTurn, winner, embattled]);
 
   useEffect(() => {
     return () => {
@@ -198,15 +205,19 @@ export default function Home() {
     // Defender holds purely on its OWN roll (defender wins ties).
     const defenseSucceeds = defenseRoll <= defenderStats.defense;
 
-    // The defender's survival depends ONLY on its defense roll.
-    // If it fails its save, the attacker captures the square.
-    // If it holds, the attacker is repelled — and survives to retreat
-    // only if its own attack roll landed, otherwise it is destroyed.
+    // Outcome matrix (each side wins only by clearly out-rolling the other):
+    //  - attacker hits  & defender fails  -> capture (attacker takes the square)
+    //  - defender holds & attacker misses -> attacker destroyed
+    //  - otherwise (both succeed OR both fail) -> EMBATTLED:
+    //    neither overcomes the other, so both lock onto the square and
+    //    keep fighting until one finally kills the other.
     let outcome: CombatOutcome;
-    if (!defenseSucceeds) {
+    if (attackSucceeds && !defenseSucceeds) {
       outcome = 'capture';
+    } else if (defenseSucceeds && !attackSucceeds) {
+      outcome = 'repelled_destroyed';
     } else {
-      outcome = attackSucceeds ? 'repelled_retreat' : 'repelled_destroyed';
+      outcome = 'embattled';
     }
 
     return {
@@ -224,44 +235,53 @@ export default function Home() {
   };
 
   const applyCombatResult = useCallback((result: CombatResult) => {
-    const removeAttackerFromSource = (newBoard: BoardState) => {
-      if (newBoard[result.from]) {
-        const pieceIndex = newBoard[result.from].indexOf(result.attacker);
-        if (pieceIndex > -1) {
-          newBoard[result.from] = [...newBoard[result.from]];
-          newBoard[result.from].splice(pieceIndex, 1);
-          if (newBoard[result.from].length === 0) delete newBoard[result.from];
+    const newBoard: BoardState = { ...boardRef.current };
+
+    const removeOne = (sq: Square, piece: PieceType) => {
+      if (newBoard[sq]) {
+        const idx = newBoard[sq].indexOf(piece);
+        if (idx > -1) {
+          newBoard[sq] = [...newBoard[sq]];
+          newBoard[sq].splice(idx, 1);
+          if (newBoard[sq].length === 0) delete newBoard[sq];
         }
       }
     };
+    const addOne = (sq: Square, piece: PieceType) => {
+      if (!newBoard[sq]) newBoard[sq] = [];
+      else newBoard[sq] = [...newBoard[sq]];
+      newBoard[sq].push(piece);
+    };
 
-    setBoard(prev => {
-      const newBoard = { ...prev };
-
-      if (result.outcome === 'capture') {
-        // Defender failed its save -> attacker takes the square
-        removeAttackerFromSource(newBoard);
-
-        if (newBoard[result.to]) {
-          const defenderIndex = newBoard[result.to].indexOf(result.defender);
-          if (defenderIndex > -1) {
-            newBoard[result.to] = [...newBoard[result.to]];
-            newBoard[result.to].splice(defenderIndex, 1);
-          }
-        }
-
-        if (!newBoard[result.to]) newBoard[result.to] = [];
-        else newBoard[result.to] = [...newBoard[result.to]];
-        newBoard[result.to].push(result.attacker);
-
-      } else if (result.outcome === 'repelled_destroyed') {
-        // Defender held and attacker missed -> attacker is destroyed
-        removeAttackerFromSource(newBoard);
+    if (result.outcome === 'capture') {
+      // Defender beaten -> attacker takes the square
+      removeOne(result.from, result.attacker);
+      removeOne(result.to, result.defender);
+      addOne(result.to, result.attacker);
+    } else if (result.outcome === 'repelled_destroyed') {
+      // Attacker beaten -> attacker is destroyed
+      removeOne(result.from, result.attacker);
+    } else {
+      // Embattled: attacker charges in (if not already there); both lock on the square
+      if (result.from !== result.to) {
+        removeOne(result.from, result.attacker);
+        addOne(result.to, result.attacker);
       }
-      // 'repelled_retreat': defender held, attacker survives at its origin -> no board change
+    }
 
-      return newBoard;
-    });
+    setBoard(newBoard);
+
+    // Maintain the set of squares currently locked in battle
+    if (result.outcome === 'embattled') {
+      setEmbattled(prev => prev.includes(result.to) ? prev : [...prev, result.to]);
+    } else {
+      const remaining = newBoard[result.to] || [];
+      const hasWhite = remaining.some(isWhitePiece);
+      const hasBlack = remaining.some(p => !isWhitePiece(p));
+      if (!(hasWhite && hasBlack)) {
+        setEmbattled(prev => prev.filter(s => s !== result.to));
+      }
+    }
 
     setCurrentTurn(prev => prev === 'white' ? 'black' : 'white');
 
@@ -277,8 +297,8 @@ export default function Home() {
       title = `${defenderName} holds and destroys ${attackerName}!`;
       description = `Defense ${result.defenseRoll} (≤${result.defenseNeeded}) held; attack ${result.attackRoll} (>${result.attackNeeded}) missed.`;
     } else {
-      title = `${defenderName} holds! ${attackerName} retreats.`;
-      description = `Defense roll ${result.defenseRoll} (≤${result.defenseNeeded}) held the line.`;
+      title = `Embattled! ${attackerName} vs ${defenderName}`;
+      description = `Neither broke through — both hold the square. Click it to fight on.`;
     }
 
     toast({ title, description });
@@ -299,10 +319,15 @@ export default function Home() {
 
   const handleDragStart = useCallback((e: React.DragEvent, square: Square, piece: PieceType) => {
     if (isAnimating || winner) return;
+    if (embattled.includes(square)) {
+      // Pieces locked in battle cannot move until one kills the other
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', `${piece}|${square}`);
     setDraggedPiece({ piece, from: square });
-  }, [isAnimating, winner]);
+  }, [isAnimating, winner, embattled]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -319,6 +344,16 @@ export default function Home() {
     const [piece, fromSquare] = data.split('|') as [PieceType, Square];
 
     if (fromSquare === targetSquare) return;
+
+    if (embattled.includes(targetSquare)) {
+      // No piece may enter a square already locked in battle
+      toast({
+        title: "Square is embattled",
+        description: "No piece may enter a square locked in battle.",
+      });
+      setDraggedPiece(null);
+      return;
+    }
 
     const targetPieces = board[targetSquare] || [];
     const enemyPiece = targetPieces.find(p => isWhitePiece(p) !== isWhitePiece(piece));
@@ -355,7 +390,27 @@ export default function Home() {
     }
 
     setDraggedPiece(null);
-  }, [board, isAnimating, winner, applyCombatResult]);
+  }, [board, isAnimating, winner, embattled, applyCombatResult]);
+
+  // Resolve an ongoing battle: the current player's locked piece swings at the enemy.
+  const handleEmbattledClick = useCallback((square: Square) => {
+    if (isAnimating || winner) return;
+    if (!embattled.includes(square)) return;
+
+    const pieces = boardRef.current[square] || [];
+    const wantWhite = currentTurn === 'white';
+    const attacker = pieces.find(p => isWhitePiece(p) === wantWhite);
+    const defender = pieces.find(p => isWhitePiece(p) !== wantWhite);
+    if (!attacker || !defender) return;
+
+    setIsAnimating(true);
+    const result = resolveCombat(attacker, defender, square, square);
+    setCombatResult(result);
+    combatTimeoutRef.current = setTimeout(() => {
+      combatTimeoutRef.current = null;
+      applyCombatResult(result);
+    }, 2000);
+  }, [isAnimating, winner, embattled, currentTurn, applyCombatResult]);
 
   const handleDragEnd = useCallback(() => {
     setDraggedPiece(null);
@@ -373,6 +428,7 @@ export default function Home() {
     setCombatResult(null);
     setIsAnimating(false);
     setWinner(null);
+    setEmbattled([]);
     toast({
       title: "New Battlefield",
       description: "A fresh randomized board has been generated.",
@@ -454,13 +510,17 @@ export default function Home() {
             </div>
 
             <div className={`mt-6 text-center text-xl font-bold ${
-              combatResult.outcome === 'capture' ? 'text-red-400' : 'text-green-400'
+              combatResult.outcome === 'capture'
+                ? 'text-red-400'
+                : combatResult.outcome === 'embattled'
+                  ? 'text-amber-400'
+                  : 'text-green-400'
             }`}>
               {combatResult.outcome === 'capture'
                 ? `${PIECE_STATS[combatResult.attacker].name} captures!`
                 : combatResult.outcome === 'repelled_destroyed'
                   ? `${PIECE_STATS[combatResult.defender].name} holds & destroys the attacker!`
-                  : `${PIECE_STATS[combatResult.defender].name} holds — attacker retreats!`}
+                  : `Embattled! Both lock the square — fight on.`}
             </div>
           </Card>
         </div>
@@ -508,6 +568,9 @@ export default function Home() {
               </div>
               <div className="text-white/40 text-xs mt-2">
                 Roll ≤ stat on d6 to succeed. Defender wins ties.
+              </div>
+              <div className="text-amber-400/70 text-xs mt-1">
+                ⚔️ Embattled: if neither breaks through, both lock the square. Click it to fight on — no one moves in or out until one dies.
               </div>
             </div>
 
@@ -557,22 +620,33 @@ export default function Home() {
 
                 const pieces = board[square] || [];
                 const isLight = (r + c) % 2 === 0;
+                const isEmbattled = embattledSet.has(square);
 
                 return (
                   <div
                     key={square}
                     className={`relative flex items-center justify-center select-none ${
                       isLight ? 'bg-slate-400' : 'bg-slate-700'
-                    } shadow-inner ${draggedPiece ? 'cursor-pointer' : ''}`}
+                    } shadow-inner ${isEmbattled ? 'ring-2 ring-inset ring-amber-400 cursor-pointer animate-pulse' : ''} ${draggedPiece && !isEmbattled ? 'cursor-pointer' : ''}`}
                     style={{ width: squareSize, height: squareSize }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, square)}
+                    onClick={isEmbattled ? () => handleEmbattledClick(square) : undefined}
                     data-testid={`square-${square}`}
                   >
+                    {isEmbattled && (
+                      <div
+                        className="absolute top-0 left-0 z-30 pointer-events-none"
+                        style={{ fontSize: squareSize * 0.28, lineHeight: 1 }}
+                        data-testid={`badge-embattled-${square}`}
+                      >
+                        ⚔️
+                      </div>
+                    )}
                     {pieces.map((piece, index) => (
                       <div
                         key={`${piece}-${index}`}
-                        draggable={!isAnimating && !winner}
+                        draggable={!isAnimating && !winner && !isEmbattled}
                         onDragStart={(e) => handleDragStart(e, square, piece)}
                         onDragEnd={handleDragEnd}
                         className={`absolute cursor-grab active:cursor-grabbing transition-transform hover:scale-110 ${

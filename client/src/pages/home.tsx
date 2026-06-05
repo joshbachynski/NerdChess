@@ -205,17 +205,17 @@ export default function Home() {
     // Defender holds purely on its OWN roll (defender wins ties).
     const defenseSucceeds = defenseRoll <= defenderStats.defense;
 
-    // Outcome matrix (each side wins only by clearly out-rolling the other):
-    //  - attacker hits  & defender fails  -> capture (attacker takes the square)
-    //  - defender holds & attacker misses -> attacker destroyed
-    //  - otherwise (both succeed OR both fail) -> EMBATTLED:
-    //    neither overcomes the other, so both lock onto the square and
-    //    keep fighting until one finally kills the other.
+    // Outcome matrix — a kill (and the end of any battle) happens the moment
+    // one side succeeds where it counts:
+    //  - defender succeeds            -> defender kills the attacker (destroyed)
+    //  - defender fails & attack hits -> attacker kills the defender (capture)
+    //  - defender fails & attack miss -> EMBATTLED: nobody dies, both stay
+    //    locked on the square and keep fighting until one finally lands a kill.
     let outcome: CombatOutcome;
-    if (attackSucceeds && !defenseSucceeds) {
-      outcome = 'capture';
-    } else if (defenseSucceeds && !attackSucceeds) {
+    if (defenseSucceeds) {
       outcome = 'repelled_destroyed';
+    } else if (attackSucceeds) {
+      outcome = 'capture';
     } else {
       outcome = 'embattled';
     }
@@ -295,7 +295,7 @@ export default function Home() {
       description = `Defense roll ${result.defenseRoll} (needed ≤${result.defenseNeeded}) failed.`;
     } else if (result.outcome === 'repelled_destroyed') {
       title = `${defenderName} holds and destroys ${attackerName}!`;
-      description = `Defense ${result.defenseRoll} (≤${result.defenseNeeded}) held; attack ${result.attackRoll} (>${result.attackNeeded}) missed.`;
+      description = `Defense roll ${result.defenseRoll} (≤${result.defenseNeeded}) succeeded — the attacker is slain.`;
     } else {
       title = `Embattled! ${attackerName} vs ${defenderName}`;
       description = `Neither broke through — both hold the square. Click it to fight on.`;

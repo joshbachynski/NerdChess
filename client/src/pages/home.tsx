@@ -135,7 +135,9 @@ export default function Home() {
       if (window.innerWidth < 640) {
         setBoardWidth(window.innerWidth - 48);
       } else {
-        setBoardWidth(560);
+        const target = 1120; // 2x of the previous 560
+        const max = Math.min(window.innerWidth - 80, window.innerHeight - 80);
+        setBoardWidth(Math.min(target, max));
       }
     }
 
@@ -409,10 +411,10 @@ export default function Home() {
         </div>
       )}
 
-      <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row gap-8 items-center lg:items-start justify-center">
+      <div className="relative z-10 w-full flex items-center justify-center">
 
-        {/* Game Info Panel */}
-        <div className="w-full max-w-md space-y-4 order-2 lg:order-1">
+        {/* Game Info Panel (legend) — scaled to 50% in the top-right corner */}
+        <div className="fixed top-2 right-2 z-40 origin-top-right scale-[0.5] w-[28rem]">
           <Card className="glass-card p-6 space-y-6 text-white border-white/10">
             <div className="space-y-2">
               <h1 className="text-3xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">
@@ -478,7 +480,7 @@ export default function Home() {
 
         {/* Chess Board */}
         <div
-          className="order-1 lg:order-2 relative"
+          className="relative"
           style={{ width: boardWidth, height: boardWidth }}
           data-testid="chessboard"
         >

@@ -12,6 +12,8 @@ interface BoardState {
   [square: string]: PieceType[];
 }
 
+type CombatOutcome = 'capture' | 'repelled_destroyed' | 'repelled_retreat';
+
 interface CombatResult {
   attacker: PieceType;
   defender: PieceType;
@@ -20,6 +22,7 @@ interface CombatResult {
   attackNeeded: number;
   defenseNeeded: number;
   attackerWins: boolean;
+  outcome: CombatOutcome;
   from: Square;
   to: Square;
 }
@@ -192,9 +195,19 @@ export default function Home() {
     const defenseRoll = rollD6();
 
     const attackSucceeds = attackRoll <= attackerStats.attack;
+    // Defender holds purely on its OWN roll (defender wins ties).
     const defenseSucceeds = defenseRoll <= defenderStats.defense;
 
-    const attackerWins = attackSucceeds && !defenseSucceeds;
+    // The defender's survival depends ONLY on its defense roll.
+    // If it fails its save, the attacker captures the square.
+    // If it holds, the attacker is repelled — and survives to retreat
+    // only if its own attack roll landed, otherwise it is destroyed.
+    let outcome: CombatOutcome;
+    if (!defenseSucceeds) {
+      outcome = 'capture';
+    } else {
+      outcome = attackSucceeds ? 'repelled_retreat' : 'repelled_destroyed';
+    }
 
     return {
       attacker,
@@ -203,28 +216,32 @@ export default function Home() {
       defenseRoll,
       attackNeeded: attackerStats.attack,
       defenseNeeded: defenderStats.defense,
-      attackerWins,
+      attackerWins: outcome === 'capture',
+      outcome,
       from,
       to,
     };
   };
 
   const applyCombatResult = useCallback((result: CombatResult) => {
+    const removeAttackerFromSource = (newBoard: BoardState) => {
+      if (newBoard[result.from]) {
+        const pieceIndex = newBoard[result.from].indexOf(result.attacker);
+        if (pieceIndex > -1) {
+          newBoard[result.from] = [...newBoard[result.from]];
+          newBoard[result.from].splice(pieceIndex, 1);
+          if (newBoard[result.from].length === 0) delete newBoard[result.from];
+        }
+      }
+    };
+
     setBoard(prev => {
       const newBoard = { ...prev };
 
-      if (result.attackerWins) {
-        // Remove attacker from source
-        if (newBoard[result.from]) {
-          const pieceIndex = newBoard[result.from].indexOf(result.attacker);
-          if (pieceIndex > -1) {
-            newBoard[result.from] = [...newBoard[result.from]];
-            newBoard[result.from].splice(pieceIndex, 1);
-            if (newBoard[result.from].length === 0) delete newBoard[result.from];
-          }
-        }
+      if (result.outcome === 'capture') {
+        // Defender failed its save -> attacker takes the square
+        removeAttackerFromSource(newBoard);
 
-        // Remove defender from target
         if (newBoard[result.to]) {
           const defenderIndex = newBoard[result.to].indexOf(result.defender);
           if (defenderIndex > -1) {
@@ -233,22 +250,15 @@ export default function Home() {
           }
         }
 
-        // Place attacker at target
         if (!newBoard[result.to]) newBoard[result.to] = [];
         else newBoard[result.to] = [...newBoard[result.to]];
         newBoard[result.to].push(result.attacker);
 
-      } else {
-        // Defender wins: attacker is destroyed
-        if (newBoard[result.from]) {
-          const pieceIndex = newBoard[result.from].indexOf(result.attacker);
-          if (pieceIndex > -1) {
-            newBoard[result.from] = [...newBoard[result.from]];
-            newBoard[result.from].splice(pieceIndex, 1);
-            if (newBoard[result.from].length === 0) delete newBoard[result.from];
-          }
-        }
+      } else if (result.outcome === 'repelled_destroyed') {
+        // Defender held and attacker missed -> attacker is destroyed
+        removeAttackerFromSource(newBoard);
       }
+      // 'repelled_retreat': defender held, attacker survives at its origin -> no board change
 
       return newBoard;
     });
@@ -258,20 +268,28 @@ export default function Home() {
     const attackerName = PIECE_STATS[result.attacker].name;
     const defenderName = PIECE_STATS[result.defender].name;
 
-    toast({
-      title: result.attackerWins ? `${attackerName} captures ${defenderName}!` : `${defenderName} defends!`,
-      description: result.attackerWins
-        ? `Attack ${result.attackRoll} (≤${result.attackNeeded}) hit, Defense ${result.defenseRoll} (≤${result.defenseNeeded}) failed`
-        : `Defense roll ${result.defenseRoll} (≤${result.defenseNeeded}) held the line!`,
-    });
+    let title: string;
+    let description: string;
+    if (result.outcome === 'capture') {
+      title = `${attackerName} captures ${defenderName}!`;
+      description = `Defense roll ${result.defenseRoll} (needed ≤${result.defenseNeeded}) failed.`;
+    } else if (result.outcome === 'repelled_destroyed') {
+      title = `${defenderName} holds and destroys ${attackerName}!`;
+      description = `Defense ${result.defenseRoll} (≤${result.defenseNeeded}) held; attack ${result.attackRoll} (>${result.attackNeeded}) missed.`;
+    } else {
+      title = `${defenderName} holds! ${attackerName} retreats.`;
+      description = `Defense roll ${result.defenseRoll} (≤${result.defenseNeeded}) held the line.`;
+    }
 
-    // Win condition: a King was captured/destroyed in this combat
+    toast({ title, description });
+
+    // Win condition: a King died in this combat
     const isKing = (p: PieceType) => p === 'K' || p === 'k';
-    if (result.attackerWins && isKing(result.defender)) {
-      // The defending King died -> the attacker's side wins
+    if (result.outcome === 'capture' && isKing(result.defender)) {
+      // The defending King was captured -> the attacker's side wins
       setWinner(isWhitePiece(result.attacker) ? 'white' : 'black');
-    } else if (!result.attackerWins && isKing(result.attacker)) {
-      // The attacking King died -> the defender's side wins
+    } else if (result.outcome === 'repelled_destroyed' && isKing(result.attacker)) {
+      // The attacking King was destroyed -> the defender's side wins
       setWinner(isWhitePiece(result.attacker) ? 'black' : 'white');
     }
 
@@ -436,11 +454,13 @@ export default function Home() {
             </div>
 
             <div className={`mt-6 text-center text-xl font-bold ${
-              combatResult.attackerWins ? 'text-red-400' : 'text-green-400'
+              combatResult.outcome === 'capture' ? 'text-red-400' : 'text-green-400'
             }`}>
-              {combatResult.attackerWins
-                ? `${PIECE_STATS[combatResult.attacker].name} wins!`
-                : `${PIECE_STATS[combatResult.defender].name} survives!`}
+              {combatResult.outcome === 'capture'
+                ? `${PIECE_STATS[combatResult.attacker].name} captures!`
+                : combatResult.outcome === 'repelled_destroyed'
+                  ? `${PIECE_STATS[combatResult.defender].name} holds & destroys the attacker!`
+                  : `${PIECE_STATS[combatResult.defender].name} holds — attacker retreats!`}
             </div>
           </Card>
         </div>

@@ -3,13 +3,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Swords, Shuffle, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import voidBg from "@assets/generated_images/dark_abstract_glass_waves_background.png";
-import meadowBg from "@assets/generated_images/theme_meadow.png";
-import scifiBg from "@assets/generated_images/theme_scifi.png";
-import cityBg from "@assets/generated_images/theme_city.png";
-import cavernBg from "@assets/generated_images/theme_cavern.png";
-import dungeonBg from "@assets/generated_images/theme_dungeon.png";
-import volcanoBg from "@assets/generated_images/theme_volcano.png";
+import meadowTile from "@assets/generated_images/tile_meadow.png";
+import scifiTile from "@assets/generated_images/tile_scifi.png";
+import cityTile from "@assets/generated_images/tile_city.png";
+import cavernTile from "@assets/generated_images/tile_cavern.png";
+import dungeonTile from "@assets/generated_images/tile_dungeon.png";
+import volcanoTile from "@assets/generated_images/tile_volcano.png";
+import voidTile from "@assets/generated_images/tile_void.png";
 import type { CSSProperties } from "react";
 
 type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P' | 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
@@ -18,61 +18,52 @@ type Square = string; // "row,col"
 interface Theme {
   id: string;
   label: string;
-  bg: string;
-  light: string;        // light tile tint (rgba — background shows through)
-  dark: string;         // dark tile tint
-  overlay: string;      // page-darkening overlay class
-  obstacles: boolean;   // carve impassable interior cells
-  obstacleStyle: CSSProperties; // how a carved hazard cell looks
+  tile: string;         // seamless top-down material texture that paints the board
+  pageGlow: string;     // accent color for the dark page vignette
+  obstacles: boolean;   // carve themed impassable hazard cells
+  obstacleStyle: CSSProperties; // how a hazard cell looks
 }
 
 const THEMES: Theme[] = [
   {
-    id: 'meadow', label: 'Fantasy Meadow', bg: meadowBg,
-    light: 'rgba(150, 190, 110, 0.45)', dark: 'rgba(45, 80, 45, 0.62)',
-    overlay: 'bg-black/20', obstacles: false, obstacleStyle: {},
+    id: 'meadow', label: 'Fantasy Meadow', tile: meadowTile,
+    pageGlow: 'rgba(54, 96, 54, 0.55)', obstacles: false, obstacleStyle: {},
   },
   {
-    id: 'scifi', label: 'Sci-Fi Station', bg: scifiBg,
-    light: 'rgba(120, 180, 210, 0.40)', dark: 'rgba(18, 42, 64, 0.66)',
-    overlay: 'bg-black/25', obstacles: false, obstacleStyle: {},
+    id: 'scifi', label: 'Sci-Fi Station', tile: scifiTile,
+    pageGlow: 'rgba(28, 86, 128, 0.55)', obstacles: false, obstacleStyle: {},
   },
   {
-    id: 'city', label: 'Night City', bg: cityBg,
-    light: 'rgba(150, 160, 180, 0.42)', dark: 'rgba(30, 36, 52, 0.66)',
-    overlay: 'bg-black/30', obstacles: false, obstacleStyle: {},
+    id: 'city', label: 'Night City', tile: cityTile,
+    pageGlow: 'rgba(56, 66, 108, 0.5)', obstacles: false, obstacleStyle: {},
   },
   {
-    id: 'cavern', label: 'Crystal Cavern', bg: cavernBg,
-    light: 'rgba(130, 150, 175, 0.42)', dark: 'rgba(26, 36, 54, 0.68)',
-    overlay: 'bg-black/35', obstacles: true,
+    id: 'cavern', label: 'Crystal Cavern', tile: cavernTile,
+    pageGlow: 'rgba(36, 88, 128, 0.55)', obstacles: true,
     obstacleStyle: {
       background: 'radial-gradient(circle at 50% 45%, rgba(60, 150, 190, 0.85), rgba(8, 26, 44, 0.96))',
       boxShadow: 'inset 0 0 14px rgba(60, 170, 200, 0.6)',
     },
   },
   {
-    id: 'dungeon', label: 'Dungeon', bg: dungeonBg,
-    light: 'rgba(150, 138, 112, 0.42)', dark: 'rgba(48, 40, 30, 0.70)',
-    overlay: 'bg-black/40', obstacles: true,
+    id: 'dungeon', label: 'Dungeon', tile: dungeonTile,
+    pageGlow: 'rgba(78, 68, 48, 0.5)', obstacles: true,
     obstacleStyle: {
       background: 'radial-gradient(circle at 50% 45%, rgba(12, 12, 16, 0.95), rgba(0, 0, 0, 0.98))',
       boxShadow: 'inset 0 0 16px rgba(0, 0, 0, 0.95)',
     },
   },
   {
-    id: 'volcano', label: 'Volcano', bg: volcanoBg,
-    light: 'rgba(150, 100, 88, 0.42)', dark: 'rgba(46, 26, 22, 0.72)',
-    overlay: 'bg-black/35', obstacles: true,
+    id: 'volcano', label: 'Volcano', tile: volcanoTile,
+    pageGlow: 'rgba(140, 56, 18, 0.55)', obstacles: true,
     obstacleStyle: {
       background: 'radial-gradient(circle at 50% 45%, rgba(255, 150, 40, 0.95), rgba(150, 30, 10, 0.96))',
       boxShadow: 'inset 0 0 16px rgba(255, 90, 0, 0.9)',
     },
   },
   {
-    id: 'void', label: 'Deep Void', bg: voidBg,
-    light: 'rgba(148, 163, 184, 0.50)', dark: 'rgba(30, 41, 59, 0.66)',
-    overlay: 'bg-black/40', obstacles: false, obstacleStyle: {},
+    id: 'void', label: 'Deep Void', tile: voidTile,
+    pageGlow: 'rgba(78, 48, 118, 0.55)', obstacles: false, obstacleStyle: {},
   },
 ];
 
@@ -137,7 +128,7 @@ function generateShape(): string[] {
   const startC = Math.floor(GRID_SIZE / 2);
   active.add(`${startR},${startC}`);
 
-  const target = 46 + Math.floor(Math.random() * 18); // 46-63 cells
+  const target = 54 + Math.floor(Math.random() * 16); // 54-69 cells (holes punched later)
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   let guard = 0;
 
@@ -220,6 +211,50 @@ function carveObstacles(sortedCells: string[]): { active: string[]; blocked: str
   return { active: Array.from(active), blocked: Array.from(blocked) };
 }
 
+// Punch out interior holes & corridors so the board is rarely a solid block.
+// Holes become empty (transparent) cells; army rows stay intact.
+function punchHoles(sortedCells: string[]): string[] {
+  if (Math.random() < 0.18) return sortedCells; // sometimes a solid shape
+  const protectCount = 18; // shield the army rows top & bottom
+  const protectedSet = new Set([
+    ...sortedCells.slice(0, protectCount),
+    ...sortedCells.slice(-protectCount),
+  ]);
+  const active = new Set(sortedCells);
+  const minCells = 40;
+  const numHoles = 2 + Math.floor(Math.random() * 4); // 2-5 holes
+
+  const interiorCandidates = () =>
+    Array.from(active).filter(
+      c => !protectedSet.has(c) && cellNeighbors(c).filter(n => active.has(n)).length >= 3
+    );
+
+  for (let k = 0; k < numHoles; k++) {
+    if (active.size <= minCells) break;
+    const cands = interiorCandidates();
+    if (!cands.length) break;
+    const seed = cands[Math.floor(Math.random() * cands.length)];
+    const holeSize = 1 + Math.floor(Math.random() * 3); // 1-3 cells
+    const hole: string[] = [seed];
+    const frontier = [seed];
+    while (hole.length < holeSize) {
+      const from = frontier[Math.floor(Math.random() * frontier.length)];
+      const opts = cellNeighbors(from).filter(
+        n => active.has(n) && !protectedSet.has(n) && !hole.includes(n)
+      );
+      if (!opts.length) break;
+      const pick = opts[Math.floor(Math.random() * opts.length)];
+      hole.push(pick);
+      frontier.push(pick);
+    }
+    if (active.size - hole.length >= minCells) {
+      hole.forEach(c => active.delete(c));
+    }
+  }
+
+  return Array.from(active);
+}
+
 // Generate a random board shape with armies placed on it
 function generateBoard(withObstacles: boolean): { active: string[]; board: BoardState; blocked: string[] } {
   const sortFn = (a: string, b: string) => {
@@ -229,6 +264,9 @@ function generateBoard(withObstacles: boolean): { active: string[]; board: Board
   };
 
   let cells = generateShape();
+  cells.sort(sortFn);
+
+  cells = punchHoles(cells);
   cells.sort(sortFn);
 
   let blocked: string[] = [];
@@ -624,14 +662,11 @@ export default function Home() {
 
   return (
     <div
-      className="min-h-screen w-full flex items-center justify-center p-4 lg:p-8 bg-background relative overflow-hidden"
+      className="min-h-screen w-full flex items-center justify-center p-4 lg:p-8 relative overflow-hidden"
       style={{
-        backgroundImage: `url(${currentTheme.bg})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        background: `radial-gradient(circle at 50% 22%, ${currentTheme.pageGlow}, #08080c 68%)`,
       }}
     >
-      <div className={`absolute inset-0 ${currentTheme.overlay} z-0`} />
 
       {/* Victory Modal */}
       {winner && (
@@ -790,7 +825,7 @@ export default function Home() {
                       theme === t.id ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-white/10 hover:border-white/40'
                     }`}
                     style={{
-                      backgroundImage: `url(${t.bg})`,
+                      backgroundImage: `url(${t.tile})`,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
                     }}
@@ -818,6 +853,7 @@ export default function Home() {
             style={{
               gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
               gridTemplateRows: `repeat(${GRID_SIZE}, 1fr)`,
+              filter: 'drop-shadow(0 16px 20px rgba(0,0,0,0.85)) drop-shadow(0 2px 3px rgba(0,0,0,0.9))',
             }}
           >
             {Array.from({ length: GRID_SIZE }).map((_, r) =>
@@ -829,8 +865,8 @@ export default function Home() {
                   return (
                     <div
                       key={square}
-                      className="relative shadow-inner"
-                      style={{ width: squareSize, height: squareSize, ...currentTheme.obstacleStyle }}
+                      className="relative overflow-hidden"
+                      style={{ width: squareSize, height: squareSize, border: '2px solid rgba(0,0,0,0.85)', ...currentTheme.obstacleStyle }}
                       data-testid={`blocked-${square}`}
                     />
                   );
@@ -843,12 +879,26 @@ export default function Home() {
                 const pieces = board[square] || [];
                 const isLight = (r + c) % 2 === 0;
                 const isEmbattled = embattledSet.has(square);
+                const tint = isLight
+                  ? 'inset 0 0 0 9999px rgba(255,255,255,0.10)'
+                  : 'inset 0 0 0 9999px rgba(0,0,0,0.34)';
+                const tintShadow = isEmbattled
+                  ? `inset 0 0 0 3px rgba(251,191,36,0.95), ${tint}`
+                  : tint;
 
                 return (
                   <div
                     key={square}
-                    className={`relative flex items-center justify-center select-none shadow-inner ${isEmbattled ? 'ring-2 ring-inset ring-amber-400 cursor-pointer animate-pulse' : ''} ${draggedPiece && !isEmbattled ? 'cursor-pointer' : ''}`}
-                    style={{ width: squareSize, height: squareSize, backgroundColor: isLight ? currentTheme.light : currentTheme.dark }}
+                    className={`relative flex items-center justify-center select-none overflow-hidden ${isEmbattled ? 'cursor-pointer animate-pulse z-20' : ''} ${draggedPiece && !isEmbattled ? 'cursor-pointer' : ''}`}
+                    style={{
+                      width: squareSize,
+                      height: squareSize,
+                      backgroundImage: `url(${currentTheme.tile})`,
+                      backgroundSize: `${boardWidth}px ${boardWidth}px`,
+                      backgroundPosition: `${-c * squareSize}px ${-r * squareSize}px`,
+                      border: '2px solid rgba(0,0,0,0.82)',
+                      boxShadow: tintShadow,
+                    }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, square)}
                     onClick={isEmbattled ? () => handleEmbattledClick(square) : undefined}

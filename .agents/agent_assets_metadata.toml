@@ -36,3 +36,45 @@ id = "UyzBrFu7GJeBAaNSHC79N"
 uri = "file://attached_assets/generated_images/theme_volcano.png"
 type = "image"
 title = "generated_image"
+
+[[generated]]
+id = "5l568HrPJjyg8GLCljtbh"
+uri = "file://attached_assets/generated_images/tile_meadow.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "hyhuFTQvQ8Y6bt_dPtnQx"
+uri = "file://attached_assets/generated_images/tile_scifi.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "sNixuCxqRtL2DpX7WxEFs"
+uri = "file://attached_assets/generated_images/tile_city.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "z6AdwC3SDRSSgNf22_Drt"
+uri = "file://attached_assets/generated_images/tile_cavern.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "E1rn0YWJXPz-OhtoiX_At"
+uri = "file://attached_assets/generated_images/tile_dungeon.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "1i_9KrbRLqLEsz8jh8UPS"
+uri = "file://attached_assets/generated_images/tile_volcano.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "EpIp3YDbp3O5isVwwhifb"
+uri = "file://attached_assets/generated_images/tile_void.png"
+type = "image"
+title = "generated_image"

@@ -660,11 +660,27 @@ export default function Home() {
 
   const squareSize = boardWidth / GRID_SIZE;
 
+  // Thick black outline only on edges that face a "no-go" cell (a hole or off-grid),
+  // never between two playable cells — so the board silhouette and holes read strongly
+  // while the interior stays clean. Implemented as inset shadows so tiles stay aligned.
+  const EDGE = Math.max(3, Math.round(squareSize * 0.05));
+  const isLand = (rr: number, cc: number) =>
+    rr >= 0 && rr < GRID_SIZE && cc >= 0 && cc < GRID_SIZE &&
+    (activeSet.has(`${rr},${cc}`) || blockedSet.has(`${rr},${cc}`));
+  const edgeShadows = (r: number, c: number): string[] => {
+    const parts: string[] = [];
+    if (!isLand(r - 1, c)) parts.push(`inset 0 ${EDGE}px 0 0 #000`);
+    if (!isLand(r + 1, c)) parts.push(`inset 0 -${EDGE}px 0 0 #000`);
+    if (!isLand(r, c - 1)) parts.push(`inset ${EDGE}px 0 0 0 #000`);
+    if (!isLand(r, c + 1)) parts.push(`inset -${EDGE}px 0 0 0 #000`);
+    return parts;
+  };
+
   return (
     <div
       className="min-h-screen w-full flex items-center justify-center p-4 lg:p-8 relative overflow-hidden"
       style={{
-        background: `radial-gradient(circle at 50% 22%, ${currentTheme.pageGlow}, #08080c 68%)`,
+        background: `radial-gradient(circle at 50% 18%, ${currentTheme.pageGlow}, #030304 52%)`,
       }}
     >
 
@@ -866,7 +882,12 @@ export default function Home() {
                     <div
                       key={square}
                       className="relative overflow-hidden"
-                      style={{ width: squareSize, height: squareSize, border: '2px solid rgba(0,0,0,0.85)', ...currentTheme.obstacleStyle }}
+                      style={{
+                        width: squareSize,
+                        height: squareSize,
+                        ...currentTheme.obstacleStyle,
+                        boxShadow: [currentTheme.obstacleStyle.boxShadow as string | undefined, ...edgeShadows(r, c)].filter(Boolean).join(', ') || undefined,
+                      }}
                       data-testid={`blocked-${square}`}
                     />
                   );
@@ -880,11 +901,13 @@ export default function Home() {
                 const isLight = (r + c) % 2 === 0;
                 const isEmbattled = embattledSet.has(square);
                 const tint = isLight
-                  ? 'inset 0 0 0 9999px rgba(255,255,255,0.10)'
-                  : 'inset 0 0 0 9999px rgba(0,0,0,0.34)';
-                const tintShadow = isEmbattled
-                  ? `inset 0 0 0 3px rgba(251,191,36,0.95), ${tint}`
-                  : tint;
+                  ? 'inset 0 0 0 9999px rgba(255,255,255,0.06)'
+                  : 'inset 0 0 0 9999px rgba(0,0,0,0.42)';
+                const boxShadow = [
+                  ...(isEmbattled ? ['inset 0 0 0 3px rgba(251,191,36,0.95)'] : []),
+                  tint,
+                  ...edgeShadows(r, c),
+                ].join(', ');
 
                 return (
                   <div
@@ -896,8 +919,7 @@ export default function Home() {
                       backgroundImage: `url(${currentTheme.tile})`,
                       backgroundSize: `${boardWidth}px ${boardWidth}px`,
                       backgroundPosition: `${-c * squareSize}px ${-r * squareSize}px`,
-                      border: '2px solid rgba(0,0,0,0.82)',
-                      boxShadow: tintShadow,
+                      boxShadow,
                     }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, square)}

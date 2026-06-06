@@ -78,3 +78,411 @@ id = "EpIp3YDbp3O5isVwwhifb"
 uri = "file://attached_assets/generated_images/tile_void.png"
 type = "image"
 title = "generated_image"
+
+[[generated]]
+id = "0Ga7Gnus1QWDUnIevPEmz"
+uri = "file://attached_assets/generated_images/piece_classic_light_king.png"
+type = "image"
+title = "classic light king"
+
+[[generated]]
+id = "ry6SQ7FG_LCW_JlTgNb6e"
+uri = "file://attached_assets/generated_images/piece_classic_light_queen.png"
+type = "image"
+title = "classic light queen"
+
+[[generated]]
+id = "nbLJFlSuWZRLYzmyHQedj"
+uri = "file://attached_assets/generated_images/piece_classic_light_rook.png"
+type = "image"
+title = "classic light rook"
+
+[[generated]]
+id = "hLU6AoEIuCoJx-e_y9Df5"
+uri = "file://attached_assets/generated_images/piece_classic_light_bishop.png"
+type = "image"
+title = "classic light bishop"
+
+[[generated]]
+id = "rOmng-QH2yA1V6IQmhUyF"
+uri = "file://attached_assets/generated_images/piece_classic_light_knight.png"
+type = "image"
+title = "classic light knight"
+
+[[generated]]
+id = "-IVe5-GwEvZmjwkX2CEyh"
+uri = "file://attached_assets/generated_images/piece_classic_light_pawn.png"
+type = "image"
+title = "classic light pawn"
+
+[[generated]]
+id = "4LGIdJ063mo7QLEju6g3g"
+uri = "file://attached_assets/generated_images/piece_classic_dark_king.png"
+type = "image"
+title = "classic dark king"
+
+[[generated]]
+id = "YZUWOvMCnaETx8IghntdQ"
+uri = "file://attached_assets/generated_images/piece_classic_dark_queen.png"
+type = "image"
+title = "classic dark queen"
+
+[[generated]]
+id = "GmeX6w2FI2erEmwdMdA_T"
+uri = "file://attached_assets/generated_images/piece_classic_dark_rook.png"
+type = "image"
+title = "classic dark rook"
+
+[[generated]]
+id = "qYFW8bsDGPn4dj9yUfuh2"
+uri = "file://attached_assets/generated_images/piece_classic_dark_bishop.png"
+type = "image"
+title = "classic dark bishop"
+
+[[generated]]
+id = "bCsZQjpdSrZuHQYVBapjT"
+uri = "file://attached_assets/generated_images/piece_classic_dark_knight.png"
+type = "image"
+title = "classic dark knight"
+
+[[generated]]
+id = "DT7e7FPbpSOxenVZtuzu6"
+uri = "file://attached_assets/generated_images/piece_classic_dark_pawn.png"
+type = "image"
+title = "classic dark pawn"
+
+[[generated]]
+id = "I2Xs_3hdDDJ3hoLnGn413"
+uri = "file://attached_assets/generated_images/piece_mechs_light_king.png"
+type = "image"
+title = "mechs light king"
+
+[[generated]]
+id = "ZtCxxG0MYiGvMtAYRgIub"
+uri = "file://attached_assets/generated_images/piece_mechs_light_queen.png"
+type = "image"
+title = "mechs light queen"
+
+[[generated]]
+id = "Nlb5TmedSN8KsP_F_vJXv"
+uri = "file://attached_assets/generated_images/piece_mechs_light_rook.png"
+type = "image"
+title = "mechs light rook"
+
+[[generated]]
+id = "S1u90T0JWvsBW9sMKK8EN"
+uri = "file://attached_assets/generated_images/piece_mechs_light_bishop.png"
+type = "image"
+title = "mechs light bishop"
+
+[[generated]]
+id = "DNs5Q3AxrAQARTiAqygAg"
+uri = "file://attached_assets/generated_images/piece_beasts_light_king.png"
+type = "image"
+title = "beasts light king"
+
+[[generated]]
+id = "yV-rf1nP93I691ShFxz8Y"
+uri = "file://attached_assets/generated_images/piece_beasts_light_queen.png"
+type = "image"
+title = "beasts light queen"
+
+[[generated]]
+id = "Q7LnRlNCGG4va4qneox6l"
+uri = "file://attached_assets/generated_images/piece_mechs_light_pawn.png"
+type = "image"
+title = "mechs light pawn"
+
+[[generated]]
+id = "PFqvCAIcVffylObGm8q9X"
+uri = "file://attached_assets/generated_images/piece_mechs_dark_king.png"
+type = "image"
+title = "mechs dark king"
+
+[[generated]]
+id = "PPYhT19Qa4y8nmEl3Y6Cz"
+uri = "file://attached_assets/generated_images/piece_beasts_light_bishop.png"
+type = "image"
+title = "beasts light bishop"
+
+[[generated]]
+id = "7dIKRRl1AOoW2orSLWl-r"
+uri = "file://attached_assets/generated_images/piece_mechs_dark_queen.png"
+type = "image"
+title = "mechs dark queen"
+
+[[generated]]
+id = "453HfjXh9QDc_Y1xedyW8"
+uri = "file://attached_assets/generated_images/piece_mechs_dark_rook.png"
+type = "image"
+title = "mechs dark rook"
+
+[[generated]]
+id = "pxoU_YzCW5JY_h3cHhRCM"
+uri = "file://attached_assets/generated_images/piece_mechs_dark_bishop.png"
+type = "image"
+title = "mechs dark bishop"
+
+[[generated]]
+id = "qtULhOdW7lyGDwS4SvCLG"
+uri = "file://attached_assets/generated_images/piece_mechs_dark_knight.png"
+type = "image"
+title = "mechs dark knight"
+
+[[generated]]
+id = "IrUeeVLXrxr4XtCUnlBDP"
+uri = "file://attached_assets/generated_images/piece_beasts_dark_king.png"
+type = "image"
+title = "beasts dark king"
+
+[[generated]]
+id = "wtj4CSEULMZ1U9Bok_dxA"
+uri = "file://attached_assets/generated_images/piece_mechs_dark_pawn.png"
+type = "image"
+title = "mechs dark pawn"
+
+[[generated]]
+id = "ESGeK_4nW8-Ufr-ivfSV0"
+uri = "file://attached_assets/generated_images/piece_beasts_dark_queen.png"
+type = "image"
+title = "beasts dark queen"
+
+[[generated]]
+id = "AV9_KlUN7uXsgG_d0Jvkv"
+uri = "file://attached_assets/generated_images/piece_beasts_dark_rook.png"
+type = "image"
+title = "beasts dark rook"
+
+[[generated]]
+id = "n-MU9JrCnKEOvcDE33ii8"
+uri = "file://attached_assets/generated_images/piece_crystal_light_king.png"
+type = "image"
+title = "crystal light king"
+
+[[generated]]
+id = "etlpPfZ7qdlluS6g4-GDr"
+uri = "file://attached_assets/generated_images/piece_beasts_dark_bishop.png"
+type = "image"
+title = "beasts dark bishop"
+
+[[generated]]
+id = "mrivWGfXWKf5SNULdeSXs"
+uri = "file://attached_assets/generated_images/piece_crystal_light_queen.png"
+type = "image"
+title = "crystal light queen"
+
+[[generated]]
+id = "4cj8xFuikruB2gpZHqHZh"
+uri = "file://attached_assets/generated_images/piece_beasts_dark_knight.png"
+type = "image"
+title = "beasts dark knight"
+
+[[generated]]
+id = "DvuA101H9FDV2yOl0x7Cx"
+uri = "file://attached_assets/generated_images/piece_crystal_dark_king.png"
+type = "image"
+title = "crystal dark king"
+
+[[generated]]
+id = "tIr1POj7UCA415gJ7ajxz"
+uri = "file://attached_assets/generated_images/piece_crystal_light_rook.png"
+type = "image"
+title = "crystal light rook"
+
+[[generated]]
+id = "rKnuJjlJY6QJdATd-qH57"
+uri = "file://attached_assets/generated_images/piece_beasts_dark_pawn.png"
+type = "image"
+title = "beasts dark pawn"
+
+[[generated]]
+id = "ZX2vQBzv3qhBTqis_l4Mm"
+uri = "file://attached_assets/generated_images/piece_crystal_dark_queen.png"
+type = "image"
+title = "crystal dark queen"
+
+[[generated]]
+id = "jan1N_sdy3msYng_90-aq"
+uri = "file://attached_assets/generated_images/piece_crystal_light_bishop.png"
+type = "image"
+title = "crystal light bishop"
+
+[[generated]]
+id = "a1lA8BnEE7tZm7NOfOaLz"
+uri = "file://attached_assets/generated_images/piece_crystal_dark_rook.png"
+type = "image"
+title = "crystal dark rook"
+
+[[generated]]
+id = "HrDtOHwBawmkvcN94yIaa"
+uri = "file://attached_assets/generated_images/piece_crystal_light_knight.png"
+type = "image"
+title = "crystal light knight"
+
+[[generated]]
+id = "C_3hcIov0bAxNerlLtP6H"
+uri = "file://attached_assets/generated_images/piece_crystal_dark_bishop.png"
+type = "image"
+title = "crystal dark bishop"
+
+[[generated]]
+id = "mpFRwQrmitjSjKo-n3jPK"
+uri = "file://attached_assets/generated_images/piece_crystal_light_pawn.png"
+type = "image"
+title = "crystal light pawn"
+
+[[generated]]
+id = "xl-7zoIqWUlA8f3GwTaBg"
+uri = "file://attached_assets/generated_images/piece_crystal_dark_knight.png"
+type = "image"
+title = "crystal dark knight"
+
+[[generated]]
+id = "oWfTv1rWmc0mSg4QSWC63"
+uri = "file://attached_assets/generated_images/piece_crystal_dark_pawn.png"
+type = "image"
+title = "crystal dark pawn"
+
+[[generated]]
+id = "QurtWZYpuDexpVNmF1QpR"
+uri = "file://attached_assets/generated_images/piece_neon_light_king.png"
+type = "image"
+title = "neon light king"
+
+[[generated]]
+id = "PuMn1qcyYwmAm2afbFR4j"
+uri = "file://attached_assets/generated_images/piece_gold_light_king.png"
+type = "image"
+title = "gold light king"
+
+[[generated]]
+id = "BahTQDNTrsi9lJjBfLnLS"
+uri = "file://attached_assets/generated_images/piece_gold_dark_king.png"
+type = "image"
+title = "gold dark king"
+
+[[generated]]
+id = "sIRMPh88SWyw1SirZJzcd"
+uri = "file://attached_assets/generated_images/piece_neon_light_queen.png"
+type = "image"
+title = "neon light queen"
+
+[[generated]]
+id = "6HA5A2Vy-ZuaTOs5jjke8"
+uri = "file://attached_assets/generated_images/piece_gold_light_queen.png"
+type = "image"
+title = "gold light queen"
+
+[[generated]]
+id = "PNHdU2zDp0E0aTPpZYNtZ"
+uri = "file://attached_assets/generated_images/piece_gold_dark_queen.png"
+type = "image"
+title = "gold dark queen"
+
+[[generated]]
+id = "rlXISdXCUezrlDXYf8Ttc"
+uri = "file://attached_assets/generated_images/piece_neon_light_rook.png"
+type = "image"
+title = "neon light rook"
+
+[[generated]]
+id = "vLp-uoq2v2un3-hJcvH27"
+uri = "file://attached_assets/generated_images/piece_gold_light_rook.png"
+type = "image"
+title = "gold light rook"
+
+[[generated]]
+id = "yoFDm_mNCIlBc730DVc2-"
+uri = "file://attached_assets/generated_images/piece_gold_dark_rook.png"
+type = "image"
+title = "gold dark rook"
+
+[[generated]]
+id = "ciXbUJ12VGlgv4TCuBMld"
+uri = "file://attached_assets/generated_images/piece_neon_light_bishop.png"
+type = "image"
+title = "neon light bishop"
+
+[[generated]]
+id = "tH94_FAdahua7Y3XIS3Ds"
+uri = "file://attached_assets/generated_images/piece_gold_light_bishop.png"
+type = "image"
+title = "gold light bishop"
+
+[[generated]]
+id = "4xP8bswj4s-jFwF_p8w3Y"
+uri = "file://attached_assets/generated_images/piece_gold_dark_bishop.png"
+type = "image"
+title = "gold dark bishop"
+
+[[generated]]
+id = "L1j0Cb7i2DrPbPn5xLC6A"
+uri = "file://attached_assets/generated_images/piece_neon_light_knight.png"
+type = "image"
+title = "neon light knight"
+
+[[generated]]
+id = "avG0InaNfePayGDmB7f1D"
+uri = "file://attached_assets/generated_images/piece_gold_light_knight.png"
+type = "image"
+title = "gold light knight"
+
+[[generated]]
+id = "3sX5zUxK_ijWv4IgX3JgU"
+uri = "file://attached_assets/generated_images/piece_gold_dark_knight.png"
+type = "image"
+title = "gold dark knight"
+
+[[generated]]
+id = "YDrgkm6TqknSsgsTbOxqx"
+uri = "file://attached_assets/generated_images/piece_neon_light_pawn.png"
+type = "image"
+title = "neon light pawn"
+
+[[generated]]
+id = "vJ6xvKfpASPA6bDelsDEC"
+uri = "file://attached_assets/generated_images/piece_gold_light_pawn.png"
+type = "image"
+title = "gold light pawn"
+
+[[generated]]
+id = "G_pk86jbE_CtPVW9_hI1u"
+uri = "file://attached_assets/generated_images/piece_gold_dark_pawn.png"
+type = "image"
+title = "gold dark pawn"
+
+[[generated]]
+id = "b5yRBf-wyyRXgLfwGf-HE"
+uri = "file://attached_assets/generated_images/piece_neon_dark_king.png"
+type = "image"
+title = "neon dark king"
+
+[[generated]]
+id = "ZxrgoKod4m3U7YEqQM4VO"
+uri = "file://attached_assets/generated_images/piece_neon_dark_queen.png"
+type = "image"
+title = "neon dark queen"
+
+[[generated]]
+id = "R14oBrGBfb_SaqZu454UP"
+uri = "file://attached_assets/generated_images/piece_neon_dark_rook.png"
+type = "image"
+title = "neon dark rook"
+
+[[generated]]
+id = "G1_Y6RQ83r7BGWP8qHKUj"
+uri = "file://attached_assets/generated_images/piece_neon_dark_bishop.png"
+type = "image"
+title = "neon dark bishop"
+
+[[generated]]
+id = "ljs7-aUL1TugKuKpXLESE"
+uri = "file://attached_assets/generated_images/piece_neon_dark_knight.png"
+type = "image"
+title = "neon dark knight"
+
+[[generated]]
+id = "Dr7sRAfGfZBPid4dnOBuG"
+uri = "file://attached_assets/generated_images/piece_neon_dark_pawn.png"
+type = "image"
+title = "neon dark pawn"

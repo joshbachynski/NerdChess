@@ -121,6 +121,36 @@ const DiceIcon = ({ value }: { value: number }) => {
 
 const isWhitePiece = (piece: PieceType) => piece === piece.toUpperCase();
 
+// Themed piece art — each style ships a light army (white) and a dark army (black),
+// generated as transparent sprites. Loaded eagerly so urls are available synchronously.
+const pieceArt = import.meta.glob('../../../attached_assets/generated_images/piece_*.png', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+const pieceUrl = (file: string): string => {
+  const hit = Object.entries(pieceArt).find(([k]) => k.endsWith(`/${file}`));
+  return hit ? hit[1] : '';
+};
+
+interface PieceSet { id: string; label: string; }
+const PIECE_SETS: PieceSet[] = [
+  { id: 'classic', label: 'Marble' },
+  { id: 'mechs', label: 'Mechs' },
+  { id: 'beasts', label: 'Beasts' },
+  { id: 'crystal', label: 'Crystal' },
+  { id: 'gold', label: 'Royal Gold' },
+  { id: 'neon', label: 'Neon' },
+];
+const DEFAULT_SET = 'classic';
+
+const PIECE_TYPE_NAME: { [key in PieceType]: string } = {
+  'K': 'king', 'Q': 'queen', 'R': 'rook', 'B': 'bishop', 'N': 'knight', 'P': 'pawn',
+  'k': 'king', 'q': 'queen', 'r': 'rook', 'b': 'bishop', 'n': 'knight', 'p': 'pawn',
+};
+// White pieces wear the "light" finish, black pieces the "dark" finish.
+const pieceImage = (setId: string, piece: PieceType): string =>
+  pieceUrl(`piece_${setId}_${isWhitePiece(piece) ? 'light' : 'dark'}_${PIECE_TYPE_NAME[piece]}.png`);
+
 // Grow a random connected blob of squares
 function generateShape(): string[] {
   const active = new Set<string>();
@@ -249,6 +279,10 @@ function punchHoles(sortedCells: string[]): string[] {
     }
     if (active.size - hole.length >= minCells) {
       hole.forEach(c => active.delete(c));
+      // Keep the board as a single connected piece: undo this hole if it split the board.
+      if (!isConnected(Array.from(active))) {
+        hole.forEach(c => active.add(c));
+      }
     }
   }
 
@@ -295,7 +329,7 @@ function generateBoard(withObstacles: boolean): { active: string[]; board: Board
 
 const STORAGE_KEY = 'nerd-chess-state';
 
-function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null; embattled: string[]; blocked: string[]; theme: string } | null {
+function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null; embattled: string[]; blocked: string[]; theme: string; pieceSet: string } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -320,6 +354,7 @@ function loadSavedState(): { active: string[]; board: BoardState; currentTurn: '
         embattled: (Array.isArray(parsed.embattled) ? parsed.embattled : []).filter((c: string) => activeSet.has(c)),
         blocked,
         theme: THEMES.some(t => t.id === parsed.theme) ? parsed.theme : DEFAULT_THEME,
+        pieceSet: PIECE_SETS.some(s => s.id === parsed.pieceSet) ? parsed.pieceSet : DEFAULT_SET,
       };
     }
   } catch {
@@ -334,7 +369,7 @@ export default function Home() {
     if (saved) return saved;
     const t = THEMES.find(x => x.id === DEFAULT_THEME) || THEMES[0];
     const g = generateBoard(t.obstacles);
-    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null, embattled: [] as string[], blocked: g.blocked, theme: DEFAULT_THEME };
+    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null, embattled: [] as string[], blocked: g.blocked, theme: DEFAULT_THEME, pieceSet: DEFAULT_SET };
   });
   const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
   const [board, setBoard] = useState<BoardState>(initState.board);
@@ -347,6 +382,7 @@ export default function Home() {
   const [embattled, setEmbattled] = useState<string[]>(initState.embattled);
   const [blocked, setBlocked] = useState<string[]>(initState.blocked);
   const [theme, setTheme] = useState<string>(initState.theme);
+  const [pieceSet, setPieceSet] = useState<string>(initState.pieceSet);
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Always-fresh snapshot of the board for use inside delayed combat callbacks
@@ -361,11 +397,11 @@ export default function Home() {
   // Persist game state so a page reload / hot-reload never loses the game
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled, blocked, theme }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled, blocked, theme, pieceSet }));
     } catch {
       // ignore storage failures
     }
-  }, [activeSquares, board, currentTurn, winner, embattled, blocked, theme]);
+  }, [activeSquares, board, currentTurn, winner, embattled, blocked, theme, pieceSet]);
 
   useEffect(() => {
     return () => {
@@ -658,6 +694,12 @@ export default function Home() {
     });
   };
 
+  const applyPieceSet = (id: string) => {
+    setPieceSet(id);
+    const s = PIECE_SETS.find(x => x.id === id);
+    toast({ title: s ? s.label : 'Pieces', description: 'Army style updated.' });
+  };
+
   const squareSize = boardWidth / GRID_SIZE;
 
   // Thick black outline only on edges that face a "no-go" cell (a hole or off-grid),
@@ -688,7 +730,11 @@ export default function Home() {
       {winner && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md">
           <Card className="glass-card p-10 text-white border-white/10 max-w-md w-full mx-4 text-center animate-in zoom-in-95 duration-300">
-            <div className="text-7xl mb-4">{winner === 'white' ? '♔' : '♚'}</div>
+            <img
+              src={pieceImage(pieceSet, winner === 'white' ? 'K' : 'k')}
+              alt="King"
+              className="w-28 h-28 mx-auto mb-4 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.7)]"
+            />
             <h2 className="text-4xl font-display font-bold mb-2">
               {winner === 'white' ? 'White' : 'Black'} Wins!
             </h2>
@@ -715,7 +761,7 @@ export default function Home() {
 
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1 text-center">
-                <div className="text-6xl mb-2">{PIECE_UNICODE[combatResult.attacker]}</div>
+                <img src={pieceImage(pieceSet, combatResult.attacker)} alt={PIECE_STATS[combatResult.attacker].name} className="w-20 h-20 mx-auto mb-2 object-contain drop-shadow-[0_3px_8px_rgba(0,0,0,0.7)]" />
                 <div className="text-sm text-white/60 mb-2">{PIECE_STATS[combatResult.attacker].name}</div>
                 <div className="text-xs text-white/40 mb-3">Attack: ≤{combatResult.attackNeeded}</div>
                 <div className={`inline-flex items-center justify-center p-2 rounded-lg ${
@@ -731,7 +777,7 @@ export default function Home() {
               <div className="text-4xl text-white/30">⚔️</div>
 
               <div className="flex-1 text-center">
-                <div className="text-6xl mb-2">{PIECE_UNICODE[combatResult.defender]}</div>
+                <img src={pieceImage(pieceSet, combatResult.defender)} alt={PIECE_STATS[combatResult.defender].name} className="w-20 h-20 mx-auto mb-2 object-contain drop-shadow-[0_3px_8px_rgba(0,0,0,0.7)]" />
                 <div className="text-sm text-white/60 mb-2">{PIECE_STATS[combatResult.defender].name}</div>
                 <div className="text-xs text-white/40 mb-3">Defense: ≤{combatResult.defenseNeeded}</div>
                 <div className={`inline-flex items-center justify-center p-2 rounded-lg ${
@@ -855,6 +901,29 @@ export default function Home() {
                 ))}
               </div>
             </div>
+
+            <div className="space-y-2">
+              <div className="text-white/60 font-semibold uppercase tracking-wider text-xs">Pieces</div>
+              <div className="grid grid-cols-3 gap-2">
+                {PIECE_SETS.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => applyPieceSet(s.id)}
+                    className={`relative flex flex-col items-center justify-end gap-1 h-20 rounded-lg overflow-hidden border p-1 bg-black/40 transition-all ${
+                      pieceSet === s.id ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-white/10 hover:border-white/40'
+                    }`}
+                    data-testid={`button-pieceset-${s.id}`}
+                  >
+                    <img
+                      src={pieceImage(s.id, 'K')}
+                      alt={s.label}
+                      className="h-12 w-12 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]"
+                    />
+                    <span className="text-[10px] font-semibold leading-tight text-white text-center">{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </Card>
         </div>
 
@@ -936,24 +1005,22 @@ export default function Home() {
                       </div>
                     )}
                     {pieces.map((piece, index) => (
-                      <div
+                      <img
                         key={`${piece}-${index}`}
+                        src={pieceImage(pieceSet, piece)}
+                        alt={PIECE_STATS[piece].name}
                         draggable={!isAnimating && !winner && !isEmbattled}
                         onDragStart={(e) => handleDragStart(e, square, piece)}
                         onDragEnd={handleDragEnd}
-                        className={`absolute cursor-grab active:cursor-grabbing transition-transform hover:scale-110 ${
-                          isWhitePiece(piece) ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : 'text-black drop-shadow-[0_2px_4px_rgba(255,255,255,0.3)]'
-                        } ${isAnimating ? 'pointer-events-none' : ''}`}
+                        className={`absolute inset-0 m-auto select-none object-contain cursor-grab active:cursor-grabbing transition-transform hover:scale-110 drop-shadow-[0_3px_5px_rgba(0,0,0,0.85)] ${isAnimating ? 'pointer-events-none' : ''}`}
                         style={{
-                          fontSize: squareSize * 0.68,
-                          lineHeight: 1,
+                          width: squareSize * 0.92,
+                          height: squareSize * 0.92,
                           zIndex: 10 + index,
                           transform: pieces.length > 1 ? `translate(${index * 4}px, ${index * -4}px)` : undefined,
                         }}
                         data-testid={`piece-${square}-${index}`}
-                      >
-                        {PIECE_UNICODE[piece]}
-                      </div>
+                      />
                     ))}
                   </div>
                 );

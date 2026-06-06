@@ -1047,6 +1047,7 @@ export default function Home() {
                         draggable={!isAnimating && !winner && !isEmbattled}
                         onDragStart={(e) => handleDragStart(e, square, piece)}
                         onDragEnd={handleDragEnd}
+                        title={`${isWhitePiece(piece) ? 'White' : 'Black'} ${PIECE_STATS[piece].name}`}
                         className={`absolute inset-0 m-auto flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform hover:scale-110 ${isAnimating ? 'pointer-events-none' : ''}`}
                         style={{
                           width: squareSize * 0.92,

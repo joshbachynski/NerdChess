@@ -663,7 +663,7 @@ export default function Home() {
   // Thick black outline only on edges that face a "no-go" cell (a hole or off-grid),
   // never between two playable cells — so the board silhouette and holes read strongly
   // while the interior stays clean. Implemented as inset shadows so tiles stay aligned.
-  const EDGE = Math.max(3, Math.round(squareSize * 0.05));
+  const EDGE = Math.max(5, Math.round(squareSize * 0.09));
   const isLand = (rr: number, cc: number) =>
     rr >= 0 && rr < GRID_SIZE && cc >= 0 && cc < GRID_SIZE &&
     (activeSet.has(`${rr},${cc}`) || blockedSet.has(`${rr},${cc}`));
@@ -680,7 +680,7 @@ export default function Home() {
     <div
       className="min-h-screen w-full flex items-center justify-center p-4 lg:p-8 relative overflow-hidden"
       style={{
-        background: `radial-gradient(circle at 50% 18%, ${currentTheme.pageGlow}, #030304 52%)`,
+        background: `radial-gradient(circle at 50% 20%, ${currentTheme.pageGlow}, #2b2f37 62%)`,
       }}
     >
 

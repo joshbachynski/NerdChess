@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Swords, Shuffle, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import meadowTile from "@assets/generated_images/tile_meadow.png";
 import scifiTile from "@assets/generated_images/tile_scifi.png";
 import cityTile from "@assets/generated_images/tile_city.png";
@@ -1042,28 +1043,33 @@ export default function Home() {
                       </div>
                     )}
                     {pieces.map((piece, index) => (
-                      <div
-                        key={`${piece}-${index}`}
-                        draggable={!isAnimating && !winner && !isEmbattled}
-                        onDragStart={(e) => handleDragStart(e, square, piece)}
-                        onDragEnd={handleDragEnd}
-                        title={`${isWhitePiece(piece) ? 'White' : 'Black'} ${PIECE_STATS[piece].name}`}
-                        className={`absolute inset-0 m-auto flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform hover:scale-110 ${isAnimating ? 'pointer-events-none' : ''}`}
-                        style={{
-                          width: squareSize * 0.92,
-                          height: squareSize * 0.92,
-                          zIndex: 10 + index,
-                          transform: pieces.length > 1 ? `translate(${index * 4}px, ${index * -4}px)` : undefined,
-                        }}
-                        data-testid={`piece-${square}-${index}`}
-                      >
-                        <img
-                          src={pieceImage(pieceSet, piece)}
-                          alt={PIECE_STATS[piece].name}
-                          draggable={false}
-                          className="w-full h-full object-contain pointer-events-none select-none drop-shadow-[0_3px_5px_rgba(0,0,0,0.85)]"
-                        />
-                      </div>
+                      <Tooltip key={`${piece}-${index}`}>
+                        <TooltipTrigger asChild>
+                          <div
+                            draggable={!isAnimating && !winner && !isEmbattled}
+                            onDragStart={(e) => handleDragStart(e, square, piece)}
+                            onDragEnd={handleDragEnd}
+                            className={`absolute inset-0 m-auto flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform hover:scale-110 ${isAnimating ? 'pointer-events-none' : ''}`}
+                            style={{
+                              width: squareSize * 0.92,
+                              height: squareSize * 0.92,
+                              zIndex: 10 + index,
+                              transform: pieces.length > 1 ? `translate(${index * 4}px, ${index * -4}px)` : undefined,
+                            }}
+                            data-testid={`piece-${square}-${index}`}
+                          >
+                            <img
+                              src={pieceImage(pieceSet, piece)}
+                              alt={PIECE_STATS[piece].name}
+                              draggable={false}
+                              className="w-full h-full object-contain pointer-events-none select-none drop-shadow-[0_3px_5px_rgba(0,0,0,0.85)]"
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent data-testid={`tooltip-piece-${square}-${index}`}>
+                          {`${isWhitePiece(piece) ? 'White' : 'Black'} ${PIECE_STATS[piece].name}`}
+                        </TooltipContent>
+                      </Tooltip>
                     ))}
                   </div>
                 );

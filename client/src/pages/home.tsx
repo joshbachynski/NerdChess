@@ -108,7 +108,7 @@ const PIECE_UNICODE: { [key in PieceType]: string } = {
   'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟',
 };
 
-const GRID_SIZE = 10;
+const GRID_SIZE = 12;
 
 const BLACK_BACK: PieceType[] = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
 const WHITE_BACK: PieceType[] = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
@@ -158,7 +158,7 @@ function generateShape(): string[] {
   const startC = Math.floor(GRID_SIZE / 2);
   active.add(`${startR},${startC}`);
 
-  const target = 54 + Math.floor(Math.random() * 16); // 54-69 cells (holes punched later)
+  const target = 72 + Math.floor(Math.random() * 21); // 72-92 cells (solid organic blob)
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   let guard = 0;
 
@@ -289,8 +289,45 @@ function punchHoles(sortedCells: string[]): string[] {
   return Array.from(active);
 }
 
+// Fill any empty cells fully enclosed by the board so the interior has no uninhabitable holes
+function fillInteriorHoles(cells: string[]): string[] {
+  const active = new Set(cells);
+  const reachable = new Set<string>();
+  const queue: [number, number][] = [];
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (r === 0 || c === 0 || r === GRID_SIZE - 1 || c === GRID_SIZE - 1) {
+        const k = `${r},${c}`;
+        if (!active.has(k) && !reachable.has(k)) {
+          reachable.add(k);
+          queue.push([r, c]);
+        }
+      }
+    }
+  }
+  while (queue.length) {
+    const [r, c] = queue.shift()!;
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nc < 0 || nr >= GRID_SIZE || nc >= GRID_SIZE) continue;
+      const k = `${nr},${nc}`;
+      if (!active.has(k) && !reachable.has(k)) {
+        reachable.add(k);
+        queue.push([nr, nc]);
+      }
+    }
+  }
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const k = `${r},${c}`;
+      if (!active.has(k) && !reachable.has(k)) active.add(k);
+    }
+  }
+  return Array.from(active);
+}
+
 // Generate a random board shape with armies placed on it
-function generateBoard(withObstacles: boolean): { active: string[]; board: BoardState; blocked: string[] } {
+function generateBoard(_withObstacles: boolean): { active: string[]; board: BoardState; blocked: string[] } {
   const sortFn = (a: string, b: string) => {
     const [ra, ca] = a.split(',').map(Number);
     const [rb, cb] = b.split(',').map(Number);
@@ -298,18 +335,10 @@ function generateBoard(withObstacles: boolean): { active: string[]; board: Board
   };
 
   let cells = generateShape();
+  cells = fillInteriorHoles(cells);
   cells.sort(sortFn);
 
-  cells = punchHoles(cells);
-  cells.sort(sortFn);
-
-  let blocked: string[] = [];
-  if (withObstacles) {
-    const carved = carveObstacles(cells);
-    cells = carved.active;
-    cells.sort(sortFn);
-    blocked = carved.blocked;
-  }
+  const blocked: string[] = [];
 
   const board: BoardState = {};
 
@@ -808,10 +837,10 @@ export default function Home() {
         </div>
       )}
 
-      <div className="relative z-10 w-full flex items-center justify-center">
+      <div className="relative z-10 w-full flex items-center justify-start">
 
-        {/* Game Info Panel (legend) — scaled to 50% in the top-right corner */}
-        <div className="fixed top-2 right-2 z-40 origin-top-right scale-[0.5] w-[28rem]">
+        {/* Game Info Panel (legend) — fixed in the top-right corner */}
+        <div className="fixed top-2 right-2 z-40 origin-top-right scale-[1] w-[28rem]">
           <Card className="glass-card p-6 space-y-6 text-white border-white/10">
             <div className="space-y-2">
               <h1 className="text-3xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">
@@ -1005,14 +1034,12 @@ export default function Home() {
                       </div>
                     )}
                     {pieces.map((piece, index) => (
-                      <img
+                      <div
                         key={`${piece}-${index}`}
-                        src={pieceImage(pieceSet, piece)}
-                        alt={PIECE_STATS[piece].name}
                         draggable={!isAnimating && !winner && !isEmbattled}
                         onDragStart={(e) => handleDragStart(e, square, piece)}
                         onDragEnd={handleDragEnd}
-                        className={`absolute inset-0 m-auto select-none object-contain cursor-grab active:cursor-grabbing transition-transform hover:scale-110 drop-shadow-[0_3px_5px_rgba(0,0,0,0.85)] ${isAnimating ? 'pointer-events-none' : ''}`}
+                        className={`absolute inset-0 m-auto flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform hover:scale-110 ${isAnimating ? 'pointer-events-none' : ''}`}
                         style={{
                           width: squareSize * 0.92,
                           height: squareSize * 0.92,
@@ -1020,7 +1047,14 @@ export default function Home() {
                           transform: pieces.length > 1 ? `translate(${index * 4}px, ${index * -4}px)` : undefined,
                         }}
                         data-testid={`piece-${square}-${index}`}
-                      />
+                      >
+                        <img
+                          src={pieceImage(pieceSet, piece)}
+                          alt={PIECE_STATS[piece].name}
+                          draggable={false}
+                          className="w-full h-full object-contain pointer-events-none select-none drop-shadow-[0_3px_5px_rgba(0,0,0,0.85)]"
+                        />
+                      </div>
                     ))}
                   </div>
                 );

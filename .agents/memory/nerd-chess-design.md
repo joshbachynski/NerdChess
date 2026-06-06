@@ -32,7 +32,17 @@ Frontend-only React prototype (mockup_js stack). Entire game lives in `client/sr
 - `pieceSet` is persisted in localStorage alongside `theme` (validated in `loadSavedState`, `DEFAULT_SET='classic'`). Switching sets (`applyPieceSet`) does NOT regenerate the board — only swaps art.
 - Generation prompt recipe (in case of regen): "<piece form>, rendered as a <style base>, <color finish>. Single isolated game piece, centered, upright front view... plain flat solid light gray background" + `removeBackground:true`. The flat gray bg makes background removal clean (corners come out alpha 0).
 
-## Holes, corridors & obstacles
+## Drag & drop source element
+- The draggable DnD source MUST be a `<div>` wrapper, NOT the `<img>` itself. Making an `<img>` the drag source breaks the custom HTML5 drag/drop (native image dragging hijacks it) — pieces become unmovable. Keep the piece `<img>` as `draggable={false}` + `pointer-events-none` inside a draggable `<div>` that carries `onDragStart`/`onDragEnd`/`draggable`. **Why:** a regression where pieces couldn't be moved was caused exactly by putting handlers on the img.
+
+## Board shape: solid interior, organic edges only
+- The interior must have NO uninhabitable squares (user requirement). `punchHoles` and `carveObstacles` are RETIRED (defined but uncalled). `generateBoard` calls `fillInteriorHoles(cells)` to flood-fill from the grid border and fill any fully-enclosed empty pocket, guaranteeing a solid interior. Only perimeter concavities (inlets open to the edge) remain — that is the intended organic silhouette.
+- GRID_SIZE is 12 (raised from 10 for ~20% more squares). `generateShape` target 72-92 cells.
+
+## Layout
+- Legend/info panel is a `fixed top-2 right-2` Card. It renders at full size (`scale-[1]`); it was previously `scale-[0.5]`. The board wrapper uses `justify-start` (board flush-left), not `justify-center`.
+
+## Holes, corridors & obstacles (HISTORICAL — superseded by "solid interior" above)
 - `punchHoles` (called for ALL boards, ~82% chance): removes 2-5 interior hole clusters (1-3 cells) from interior cells only (≥3 active neighbors), protecting first/last 18 sorted (army rows), never below 40 cells. Holes are inactive/transparent (page bg shows through). **Why:** user wanted boards with holes/corridors, not a solid block.
 - **The board must always be a SINGLE connected piece.** `punchHoles` reverts any hole removal that disconnects the active set (`isConnected` BFS check, re-adds the cells). Do not remove this — the user explicitly required no disconnected islands.
 - Enclosed themes (cavern/dungeon/volcano) additionally carve themed hazards via `carveObstacles`: 2-4 clusters of 1-3 cells. Invariants: army rows protected, `active ∩ blocked = ∅`, playable area stays 4-connected (`isConnected` BFS before each carve).

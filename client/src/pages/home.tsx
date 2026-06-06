@@ -3,10 +3,80 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Swords, Shuffle, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import bgImage from "@assets/generated_images/dark_abstract_glass_waves_background.png";
+import voidBg from "@assets/generated_images/dark_abstract_glass_waves_background.png";
+import meadowBg from "@assets/generated_images/theme_meadow.png";
+import scifiBg from "@assets/generated_images/theme_scifi.png";
+import cityBg from "@assets/generated_images/theme_city.png";
+import cavernBg from "@assets/generated_images/theme_cavern.png";
+import dungeonBg from "@assets/generated_images/theme_dungeon.png";
+import volcanoBg from "@assets/generated_images/theme_volcano.png";
+import type { CSSProperties } from "react";
 
 type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P' | 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
 type Square = string; // "row,col"
+
+interface Theme {
+  id: string;
+  label: string;
+  bg: string;
+  light: string;        // light tile tint (rgba — background shows through)
+  dark: string;         // dark tile tint
+  overlay: string;      // page-darkening overlay class
+  obstacles: boolean;   // carve impassable interior cells
+  obstacleStyle: CSSProperties; // how a carved hazard cell looks
+}
+
+const THEMES: Theme[] = [
+  {
+    id: 'meadow', label: 'Fantasy Meadow', bg: meadowBg,
+    light: 'rgba(150, 190, 110, 0.45)', dark: 'rgba(45, 80, 45, 0.62)',
+    overlay: 'bg-black/20', obstacles: false, obstacleStyle: {},
+  },
+  {
+    id: 'scifi', label: 'Sci-Fi Station', bg: scifiBg,
+    light: 'rgba(120, 180, 210, 0.40)', dark: 'rgba(18, 42, 64, 0.66)',
+    overlay: 'bg-black/25', obstacles: false, obstacleStyle: {},
+  },
+  {
+    id: 'city', label: 'Night City', bg: cityBg,
+    light: 'rgba(150, 160, 180, 0.42)', dark: 'rgba(30, 36, 52, 0.66)',
+    overlay: 'bg-black/30', obstacles: false, obstacleStyle: {},
+  },
+  {
+    id: 'cavern', label: 'Crystal Cavern', bg: cavernBg,
+    light: 'rgba(130, 150, 175, 0.42)', dark: 'rgba(26, 36, 54, 0.68)',
+    overlay: 'bg-black/35', obstacles: true,
+    obstacleStyle: {
+      background: 'radial-gradient(circle at 50% 45%, rgba(60, 150, 190, 0.85), rgba(8, 26, 44, 0.96))',
+      boxShadow: 'inset 0 0 14px rgba(60, 170, 200, 0.6)',
+    },
+  },
+  {
+    id: 'dungeon', label: 'Dungeon', bg: dungeonBg,
+    light: 'rgba(150, 138, 112, 0.42)', dark: 'rgba(48, 40, 30, 0.70)',
+    overlay: 'bg-black/40', obstacles: true,
+    obstacleStyle: {
+      background: 'radial-gradient(circle at 50% 45%, rgba(12, 12, 16, 0.95), rgba(0, 0, 0, 0.98))',
+      boxShadow: 'inset 0 0 16px rgba(0, 0, 0, 0.95)',
+    },
+  },
+  {
+    id: 'volcano', label: 'Volcano', bg: volcanoBg,
+    light: 'rgba(150, 100, 88, 0.42)', dark: 'rgba(46, 26, 22, 0.72)',
+    overlay: 'bg-black/35', obstacles: true,
+    obstacleStyle: {
+      background: 'radial-gradient(circle at 50% 45%, rgba(255, 150, 40, 0.95), rgba(150, 30, 10, 0.96))',
+      boxShadow: 'inset 0 0 16px rgba(255, 90, 0, 0.9)',
+    },
+  },
+  {
+    id: 'void', label: 'Deep Void', bg: voidBg,
+    light: 'rgba(148, 163, 184, 0.50)', dark: 'rgba(30, 41, 59, 0.66)',
+    overlay: 'bg-black/40', obstacles: false, obstacleStyle: {},
+  },
+];
+
+const DEFAULT_THEME = 'meadow';
 
 interface BoardState {
   [square: string]: PieceType[];
@@ -86,16 +156,88 @@ function generateShape(): string[] {
   return Array.from(active);
 }
 
-// Generate a random board shape with armies placed on it
-function generateBoard(): { active: string[]; board: BoardState } {
-  const cells = generateShape();
+function cellNeighbors(cell: string): string[] {
+  const [r, c] = cell.split(',').map(Number);
+  return [[r + 1, c], [r - 1, c], [r, c + 1], [r, c - 1]]
+    .filter(([nr, nc]) => nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE)
+    .map(([nr, nc]) => `${nr},${nc}`);
+}
 
-  // Sort top-to-bottom, left-to-right
-  cells.sort((a, b) => {
+// Is every active cell reachable from every other (4-connectivity)?
+function isConnected(activeArr: string[]): boolean {
+  if (activeArr.length === 0) return true;
+  const set = new Set(activeArr);
+  const seen = new Set<string>([activeArr[0]]);
+  const stack = [activeArr[0]];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    for (const n of cellNeighbors(cur)) {
+      if (set.has(n) && !seen.has(n)) { seen.add(n); stack.push(n); }
+    }
+  }
+  return seen.size === set.size;
+}
+
+// Carve a few impassable interior clusters (lava pits / chasms) while keeping
+// the playable area connected and the army rows intact.
+function carveObstacles(sortedCells: string[]): { active: string[]; blocked: string[] } {
+  const protectCount = 18; // keep top & bottom army cells (16 each) + buffer
+  const protectedSet = new Set([
+    ...sortedCells.slice(0, protectCount),
+    ...sortedCells.slice(-protectCount),
+  ]);
+  const candidates = sortedCells.filter(c => !protectedSet.has(c));
+  if (candidates.length < 6) return { active: sortedCells, blocked: [] };
+
+  const active = new Set(sortedCells);
+  const blocked = new Set<string>();
+  const numClusters = 2 + Math.floor(Math.random() * 3); // 2-4 clusters
+
+  for (let k = 0; k < numClusters; k++) {
+    const avail = candidates.filter(c => active.has(c) && !blocked.has(c));
+    if (!avail.length) break;
+    const seed = avail[Math.floor(Math.random() * avail.length)];
+    const clusterSize = 1 + Math.floor(Math.random() * 3); // 1-3 cells
+    const cluster: string[] = [seed];
+    const frontier = [seed];
+    while (cluster.length < clusterSize) {
+      const from = frontier[Math.floor(Math.random() * frontier.length)];
+      const opts = cellNeighbors(from).filter(
+        n => active.has(n) && !blocked.has(n) && !protectedSet.has(n) && !cluster.includes(n)
+      );
+      if (!opts.length) break;
+      const pick = opts[Math.floor(Math.random() * opts.length)];
+      cluster.push(pick);
+      frontier.push(pick);
+    }
+    const trial = new Set(active);
+    cluster.forEach(c => trial.delete(c));
+    if (isConnected(Array.from(trial))) {
+      cluster.forEach(c => { active.delete(c); blocked.add(c); });
+    }
+  }
+
+  return { active: Array.from(active), blocked: Array.from(blocked) };
+}
+
+// Generate a random board shape with armies placed on it
+function generateBoard(withObstacles: boolean): { active: string[]; board: BoardState; blocked: string[] } {
+  const sortFn = (a: string, b: string) => {
     const [ra, ca] = a.split(',').map(Number);
     const [rb, cb] = b.split(',').map(Number);
     return ra - rb || ca - cb;
-  });
+  };
+
+  let cells = generateShape();
+  cells.sort(sortFn);
+
+  let blocked: string[] = [];
+  if (withObstacles) {
+    const carved = carveObstacles(cells);
+    cells = carved.active;
+    cells.sort(sortFn);
+    blocked = carved.blocked;
+  }
 
   const board: BoardState = {};
 
@@ -110,23 +252,36 @@ function generateBoard(): { active: string[]; board: BoardState } {
   whitePawnCells.forEach((cell) => { board[cell] = ['P']; });
   whiteBackCells.forEach((cell, i) => { board[cell] = [WHITE_BACK[i]]; });
 
-  return { active: cells, board };
+  return { active: cells, board, blocked };
 }
 
 const STORAGE_KEY = 'nerd-chess-state';
 
-function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null; embattled: string[] } | null {
+function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null; embattled: string[]; blocked: string[]; theme: string } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed.active) && parsed.board && typeof parsed.board === 'object') {
+      const activeArr: string[] = parsed.active;
+      const activeSet = new Set(activeArr);
+      // Normalize: blocked cells can never overlap active cells, and no piece
+      // may sit on a non-active (carved/blocked) square — guards against stale state.
+      const blocked: string[] = (Array.isArray(parsed.blocked) ? parsed.blocked : []).filter(
+        (c: string) => !activeSet.has(c)
+      );
+      const board: BoardState = {};
+      for (const [sq, pieces] of Object.entries(parsed.board as BoardState)) {
+        if (activeSet.has(sq)) board[sq] = pieces;
+      }
       return {
-        active: parsed.active,
-        board: parsed.board,
+        active: activeArr,
+        board,
         currentTurn: parsed.currentTurn === 'black' ? 'black' : 'white',
         winner: parsed.winner === 'white' || parsed.winner === 'black' ? parsed.winner : null,
-        embattled: Array.isArray(parsed.embattled) ? parsed.embattled : [],
+        embattled: (Array.isArray(parsed.embattled) ? parsed.embattled : []).filter((c: string) => activeSet.has(c)),
+        blocked,
+        theme: THEMES.some(t => t.id === parsed.theme) ? parsed.theme : DEFAULT_THEME,
       };
     }
   } catch {
@@ -139,8 +294,9 @@ export default function Home() {
   const [initState] = useState(() => {
     const saved = loadSavedState();
     if (saved) return saved;
-    const g = generateBoard();
-    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null, embattled: [] as string[] };
+    const t = THEMES.find(x => x.id === DEFAULT_THEME) || THEMES[0];
+    const g = generateBoard(t.obstacles);
+    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null, embattled: [] as string[], blocked: g.blocked, theme: DEFAULT_THEME };
   });
   const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
   const [board, setBoard] = useState<BoardState>(initState.board);
@@ -151,6 +307,8 @@ export default function Home() {
   const [isAnimating, setIsAnimating] = useState(false);
   const [winner, setWinner] = useState<'white' | 'black' | null>(initState.winner);
   const [embattled, setEmbattled] = useState<string[]>(initState.embattled);
+  const [blocked, setBlocked] = useState<string[]>(initState.blocked);
+  const [theme, setTheme] = useState<string>(initState.theme);
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Always-fresh snapshot of the board for use inside delayed combat callbacks
@@ -159,15 +317,17 @@ export default function Home() {
 
   const activeSet = new Set(activeSquares);
   const embattledSet = new Set(embattled);
+  const blockedSet = new Set(blocked);
+  const currentTheme = THEMES.find(t => t.id === theme) || THEMES[0];
 
   // Persist game state so a page reload / hot-reload never loses the game
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled, blocked, theme }));
     } catch {
       // ignore storage failures
     }
-  }, [activeSquares, board, currentTurn, winner, embattled]);
+  }, [activeSquares, board, currentTurn, winner, embattled, blocked, theme]);
 
   useEffect(() => {
     return () => {
@@ -421,9 +581,10 @@ export default function Home() {
       clearTimeout(combatTimeoutRef.current);
       combatTimeoutRef.current = null;
     }
-    const { active, board: newBoard } = generateBoard();
+    const { active, board: newBoard, blocked: newBlocked } = generateBoard(currentTheme.obstacles);
     setActiveSquares(active);
     setBoard(newBoard);
+    setBlocked(newBlocked);
     setCurrentTurn('white');
     setCombatResult(null);
     setIsAnimating(false);
@@ -435,18 +596,42 @@ export default function Home() {
     });
   };
 
+  const applyTheme = (id: string) => {
+    const t = THEMES.find(x => x.id === id) || THEMES[0];
+    if (combatTimeoutRef.current) {
+      clearTimeout(combatTimeoutRef.current);
+      combatTimeoutRef.current = null;
+    }
+    const { active, board: newBoard, blocked: newBlocked } = generateBoard(t.obstacles);
+    setTheme(id);
+    setActiveSquares(active);
+    setBoard(newBoard);
+    setBlocked(newBlocked);
+    setCurrentTurn('white');
+    setCombatResult(null);
+    setIsAnimating(false);
+    setWinner(null);
+    setEmbattled([]);
+    toast({
+      title: t.label,
+      description: t.obstacles
+        ? "A new battlefield rises — beware the hazards within."
+        : "A new battlefield rises in this realm.",
+    });
+  };
+
   const squareSize = boardWidth / GRID_SIZE;
 
   return (
     <div
       className="min-h-screen w-full flex items-center justify-center p-4 lg:p-8 bg-background relative overflow-hidden"
       style={{
-        backgroundImage: `url(${bgImage})`,
+        backgroundImage: `url(${currentTheme.bg})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
     >
-      <div className="absolute inset-0 bg-background/40 backdrop-blur-sm z-0" />
+      <div className={`absolute inset-0 ${currentTheme.overlay} z-0`} />
 
       {/* Victory Modal */}
       {winner && (
@@ -593,6 +778,32 @@ export default function Home() {
                 Reset Board
               </Button>
             </div>
+
+            <div className="space-y-2">
+              <div className="text-white/60 font-semibold uppercase tracking-wider text-xs">Realm</div>
+              <div className="grid grid-cols-2 gap-2">
+                {THEMES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => applyTheme(t.id)}
+                    className={`relative h-12 rounded-lg overflow-hidden border text-xs font-semibold transition-all ${
+                      theme === t.id ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-white/10 hover:border-white/40'
+                    }`}
+                    style={{
+                      backgroundImage: `url(${t.bg})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                    data-testid={`button-theme-${t.id}`}
+                  >
+                    <span className="absolute inset-0 bg-black/45" />
+                    <span className="relative z-10 flex h-full items-center justify-center px-1 text-center leading-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                      {t.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </Card>
         </div>
 
@@ -614,6 +825,17 @@ export default function Home() {
                 const square = `${r},${c}`;
                 const isActive = activeSet.has(square);
 
+                if (blockedSet.has(square)) {
+                  return (
+                    <div
+                      key={square}
+                      className="relative shadow-inner"
+                      style={{ width: squareSize, height: squareSize, ...currentTheme.obstacleStyle }}
+                      data-testid={`blocked-${square}`}
+                    />
+                  );
+                }
+
                 if (!isActive) {
                   return <div key={square} style={{ width: squareSize, height: squareSize }} />;
                 }
@@ -625,10 +847,8 @@ export default function Home() {
                 return (
                   <div
                     key={square}
-                    className={`relative flex items-center justify-center select-none ${
-                      isLight ? 'bg-slate-400' : 'bg-slate-700'
-                    } shadow-inner ${isEmbattled ? 'ring-2 ring-inset ring-amber-400 cursor-pointer animate-pulse' : ''} ${draggedPiece && !isEmbattled ? 'cursor-pointer' : ''}`}
-                    style={{ width: squareSize, height: squareSize }}
+                    className={`relative flex items-center justify-center select-none shadow-inner ${isEmbattled ? 'ring-2 ring-inset ring-amber-400 cursor-pointer animate-pulse' : ''} ${draggedPiece && !isEmbattled ? 'cursor-pointer' : ''}`}
+                    style={{ width: squareSize, height: squareSize, backgroundColor: isLight ? currentTheme.light : currentTheme.dark }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, square)}
                     onClick={isEmbattled ? () => handleEmbattledClick(square) : undefined}

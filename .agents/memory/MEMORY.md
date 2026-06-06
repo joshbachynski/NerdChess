@@ -1,0 +1,1 @@
+- [Nerd Chess design decisions](nerd-chess-design.md) — free movement, A&A d6 combat matrix + embattled lock, King-only win, themes/obstacle carving invariants, localStorage normalization.

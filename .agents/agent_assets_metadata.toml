@@ -1,0 +1,38 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "rHfSEA8ka0p4mX0QIAGPA"
+uri = "file://attached_assets/generated_images/theme_meadow.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "iu3QU-dZaNz5dDBoTjBHs"
+uri = "file://attached_assets/generated_images/theme_scifi.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "seN5I7K5ji8VCQo6eNOj1"
+uri = "file://attached_assets/generated_images/theme_city.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "qQgJfVmVYMivxABs9MRte"
+uri = "file://attached_assets/generated_images/theme_cavern.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "HGgXuxf9X679i0aZHt4AV"
+uri = "file://attached_assets/generated_images/theme_dungeon.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "UyzBrFu7GJeBAaNSHC79N"
+uri = "file://attached_assets/generated_images/theme_volcano.png"
+type = "image"
+title = "generated_image"

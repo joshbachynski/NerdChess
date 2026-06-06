@@ -443,9 +443,14 @@ export default function Home() {
       if (window.innerWidth < 640) {
         setBoardWidth(window.innerWidth - 48);
       } else {
-        const target = 1120; // 2x of the previous 560
-        const max = Math.min(window.innerWidth - 80, window.innerHeight - 80);
-        setBoardWidth(Math.min(target, max));
+        const target = 1120;
+        // Container padding is p-4 (16px) / lg:p-8 (32px) per side; account for both sides.
+        const pad = window.innerWidth >= 1024 ? 32 : 16;
+        // Reserve room on the right for the fixed legend panel (22rem + gap) so the board never slides under it.
+        const reserved = 392;
+        const maxW = window.innerWidth - reserved - pad * 2;
+        const maxH = window.innerHeight - pad * 2;
+        setBoardWidth(Math.min(target, maxW, maxH));
       }
     }
 
@@ -839,9 +844,9 @@ export default function Home() {
 
       <div className="relative z-10 w-full flex items-center justify-start">
 
-        {/* Game Info Panel (legend) — fixed in the top-right corner */}
-        <div className="fixed top-2 right-2 z-40 origin-top-right scale-[1] w-[28rem]">
-          <Card className="glass-card p-6 space-y-6 text-white border-white/10">
+        {/* Game Info Panel (legend) — fixed in the top-right corner, capped to viewport height */}
+        <div className="fixed top-2 right-2 z-40 w-[22rem]">
+          <Card className="glass-card p-4 space-y-4 text-white border-white/10 max-h-[calc(100vh-1rem)] overflow-y-auto">
             <div className="space-y-2">
               <h1 className="text-3xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">
                 Nerd Chess

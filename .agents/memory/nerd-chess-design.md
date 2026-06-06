@@ -40,7 +40,9 @@ Frontend-only React prototype (mockup_js stack). Entire game lives in `client/sr
 - GRID_SIZE is 12 (raised from 10 for ~20% more squares). `generateShape` target 72-92 cells.
 
 ## Layout
-- Legend/info panel is a `fixed top-2 right-2` Card. It renders at full size (`scale-[1]`); it was previously `scale-[0.5]`. The board wrapper uses `justify-start` (board flush-left), not `justify-center`.
+- Board is the focus and flush-left: board wrapper uses `justify-start` (not `justify-center`).
+- Legend/info panel is a `fixed top-2 right-2 w-[22rem]` Card (NO transform scale). It is capped to the viewport with `max-h-[calc(100vh-1rem)] overflow-y-auto` so it never exceeds the screen (Pieces section scrolls). Spacing is `p-4 space-y-4`.
+- `boardWidth` resize calc (desktop branch) = `min(1120, innerW - reserved - pad*2, innerH - pad*2)` where `pad = innerW>=1024 ? 32 : 16` (matches `p-4`/`lg:p-8` per side) and `reserved = 392` (legend 22rem + gap). **Why:** must subtract BOTH container padding sides (root is `overflow-hidden`, else board clips) AND reserve legend width on the right (else flush-left board slides under the fixed legend).
 
 ## Holes, corridors & obstacles (HISTORICAL — superseded by "solid interior" above)
 - `punchHoles` (called for ALL boards, ~82% chance): removes 2-5 interior hole clusters (1-3 cells) from interior cells only (≥3 active neighbors), protecting first/last 18 sorted (army rows), never below 40 cells. Holes are inactive/transparent (page bg shows through). **Why:** user wanted boards with holes/corridors, not a solid block.

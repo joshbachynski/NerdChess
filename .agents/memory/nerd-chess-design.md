@@ -35,8 +35,11 @@ Frontend-only React prototype (mockup_js stack). Entire game lives in `client/sr
 ## Drag & drop source element
 - The draggable DnD source MUST be a `<div>` wrapper, NOT the `<img>` itself. Making an `<img>` the drag source breaks the custom HTML5 drag/drop (native image dragging hijacks it) — pieces become unmovable. Keep the piece `<img>` as `draggable={false}` + `pointer-events-none` inside a draggable `<div>` that carries `onDragStart`/`onDragEnd`/`draggable`. **Why:** a regression where pieces couldn't be moved was caused exactly by putting handlers on the img.
 
-## Board shape: solid interior, organic edges only
-- The interior must have NO uninhabitable squares (user requirement). `punchHoles` and `carveObstacles` are RETIRED (defined but uncalled). `generateBoard` calls `fillInteriorHoles(cells)` to flood-fill from the grid border and fill any fully-enclosed empty pocket, guaranteeing a solid interior. Only perimeter concavities (inlets open to the edge) remain — that is the intended organic silhouette.
+## Board shape: holes & corridors, per-theme
+- Interior holes/corridors ARE wanted. A "hole" = a missing tile (empty gap, page bg shows through, 4 black edges via `edgeShadows`), NOT a special square. The user's earlier "no uninhabitable interior squares" meant no SPECIAL carved tiles — so `carveObstacles` (themed hazard tiles) stays RETIRED, but `punchHoles` is ON. `fillInteriorHoles` was DELETED (it was wrongly erasing the holes).
+- `punchHoles(cells, intensity)` is driven by per-theme `Theme.holeIntensity` (0-1). `if (Math.random() > intensity) return solid` → high-intensity themes almost always have holes; low ones often solid. `numHoles ~1-6` scales with intensity. Each gap is either a straight CORRIDOR (prob `intensity*0.6`, 3-5 cells in one cardinal direction) or a small blob (1-3 cells).
+- Current `holeIntensity`: meadow 0.45, void 0.7, volcano 0.75, city 0.8, cavern 0.85, scifi 0.9, dungeon 0.9. **Why these:** corridors/caves/streets make topographic sense for sci-fi/dungeon/cavern/city, less so for an open meadow.
+- `generateBoard(holeIntensity: number)` (NOT the old `obstacles` bool). Connectivity invariant still holds: punchHoles reverts any hole that disconnects the tile set (`isConnected`). Army rows protected (first/last 18 sorted), never below `minCells=40`.
 - GRID_SIZE is 12 (raised from 10 for ~20% more squares). `generateShape` target 72-92 cells.
 
 ## Layout
@@ -44,13 +47,7 @@ Frontend-only React prototype (mockup_js stack). Entire game lives in `client/sr
 - Legend/info panel is a `fixed top-2 right-2 w-[22rem]` Card (NO transform scale). It is capped to the viewport with `max-h-[calc(100vh-1rem)] overflow-y-auto` so it never exceeds the screen (Pieces section scrolls). Spacing is `p-4 space-y-4`.
 - `boardWidth` resize calc (desktop branch) = `min(1120, innerW - reserved - pad*2, innerH - pad*2)` where `pad = innerW>=1024 ? 32 : 16` (matches `p-4`/`lg:p-8` per side) and `reserved = 392` (legend 22rem + gap). **Why:** must subtract BOTH container padding sides (root is `overflow-hidden`, else board clips) AND reserve legend width on the right (else flush-left board slides under the fixed legend).
 
-## Holes, corridors & obstacles (HISTORICAL — superseded by "solid interior" above)
-- `punchHoles` (called for ALL boards, ~82% chance): removes 2-5 interior hole clusters (1-3 cells) from interior cells only (≥3 active neighbors), protecting first/last 18 sorted (army rows), never below 40 cells. Holes are inactive/transparent (page bg shows through). **Why:** user wanted boards with holes/corridors, not a solid block.
-- **The board must always be a SINGLE connected piece.** `punchHoles` reverts any hole removal that disconnects the active set (`isConnected` BFS check, re-adds the cells). Do not remove this — the user explicitly required no disconnected islands.
-- Enclosed themes (cavern/dungeon/volcano) additionally carve themed hazards via `carveObstacles`: 2-4 clusters of 1-3 cells. Invariants: army rows protected, `active ∩ blocked = ∅`, playable area stays 4-connected (`isConnected` BFS before each carve).
-- `generateShape` target raised to 54-69 cells to leave room after holes; armies need 32.
-- Blocked/hazard cells render as non-interactive tiles (no drop handlers) so pieces can never be dropped onto or trapped by them.
-
 ## Persistence
-- `loadSavedState` normalizes on load: drops board pieces / embattled / blocked entries that fall outside the active set, and forces `blocked` disjoint from `active`. **Why:** stale or hand-edited localStorage could otherwise trap a piece on a carved cell. Keep this guard if you change the schema.
-- Backward-compat: missing `blocked` → `[]`, invalid/missing `theme` → `DEFAULT_THEME`.
+- `loadSavedState` normalizes on load: drops board pieces / embattled entries outside the active set, and FORCES `blocked: []` (special hazard tiles are retired, so legacy saves must not resurrect them). **Why:** stale localStorage could otherwise show special squares the user explicitly rejected. Keep this if you change the schema.
+- Backward-compat: invalid/missing `theme` → `DEFAULT_THEME`, invalid/missing `pieceSet` → `DEFAULT_SET`.
+- `carveObstacles` is dead code (defined, never called). Do NOT re-wire it — special hazard squares are intentionally retired.

@@ -22,24 +22,25 @@ interface Theme {
   pageGlow: string;     // accent color for the dark page vignette
   obstacles: boolean;   // carve themed impassable hazard cells
   obstacleStyle: CSSProperties; // how a hazard cell looks
+  holeIntensity: number; // 0-1: how often this map type has interior holes/corridors, and how many
 }
 
 const THEMES: Theme[] = [
   {
     id: 'meadow', label: 'Fantasy Meadow', tile: meadowTile,
-    pageGlow: 'rgba(54, 96, 54, 0.55)', obstacles: false, obstacleStyle: {},
+    pageGlow: 'rgba(54, 96, 54, 0.55)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.45,
   },
   {
     id: 'scifi', label: 'Sci-Fi Station', tile: scifiTile,
-    pageGlow: 'rgba(28, 86, 128, 0.55)', obstacles: false, obstacleStyle: {},
+    pageGlow: 'rgba(28, 86, 128, 0.55)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.9,
   },
   {
     id: 'city', label: 'Night City', tile: cityTile,
-    pageGlow: 'rgba(56, 66, 108, 0.5)', obstacles: false, obstacleStyle: {},
+    pageGlow: 'rgba(56, 66, 108, 0.5)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.8,
   },
   {
     id: 'cavern', label: 'Crystal Cavern', tile: cavernTile,
-    pageGlow: 'rgba(36, 88, 128, 0.55)', obstacles: true,
+    pageGlow: 'rgba(36, 88, 128, 0.55)', obstacles: true, holeIntensity: 0.85,
     obstacleStyle: {
       background: 'radial-gradient(circle at 50% 45%, rgba(60, 150, 190, 0.85), rgba(8, 26, 44, 0.96))',
       boxShadow: 'inset 0 0 14px rgba(60, 170, 200, 0.6)',
@@ -47,7 +48,7 @@ const THEMES: Theme[] = [
   },
   {
     id: 'dungeon', label: 'Dungeon', tile: dungeonTile,
-    pageGlow: 'rgba(78, 68, 48, 0.5)', obstacles: true,
+    pageGlow: 'rgba(78, 68, 48, 0.5)', obstacles: true, holeIntensity: 0.9,
     obstacleStyle: {
       background: 'radial-gradient(circle at 50% 45%, rgba(12, 12, 16, 0.95), rgba(0, 0, 0, 0.98))',
       boxShadow: 'inset 0 0 16px rgba(0, 0, 0, 0.95)',
@@ -55,7 +56,7 @@ const THEMES: Theme[] = [
   },
   {
     id: 'volcano', label: 'Volcano', tile: volcanoTile,
-    pageGlow: 'rgba(140, 56, 18, 0.55)', obstacles: true,
+    pageGlow: 'rgba(140, 56, 18, 0.55)', obstacles: true, holeIntensity: 0.75,
     obstacleStyle: {
       background: 'radial-gradient(circle at 50% 45%, rgba(255, 150, 40, 0.95), rgba(150, 30, 10, 0.96))',
       boxShadow: 'inset 0 0 16px rgba(255, 90, 0, 0.9)',
@@ -63,7 +64,7 @@ const THEMES: Theme[] = [
   },
   {
     id: 'void', label: 'Deep Void', tile: voidTile,
-    pageGlow: 'rgba(78, 48, 118, 0.55)', obstacles: false, obstacleStyle: {},
+    pageGlow: 'rgba(78, 48, 118, 0.55)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.7,
   },
 ];
 
@@ -241,10 +242,14 @@ function carveObstacles(sortedCells: string[]): { active: string[]; blocked: str
   return { active: Array.from(active), blocked: Array.from(blocked) };
 }
 
-// Punch out interior holes & corridors so the board is rarely a solid block.
-// Holes become empty (transparent) cells; army rows stay intact.
-function punchHoles(sortedCells: string[]): string[] {
-  if (Math.random() < 0.18) return sortedCells; // sometimes a solid shape
+// Punch interior holes & corridors into the board. A "hole" is simply a missing tile
+// (an empty gap with edges) inside the grouping — NOT a special square. `intensity` (0-1)
+// controls both how likely a board is to have any holes and how many/how long they are.
+function punchHoles(sortedCells: string[], intensity: number): string[] {
+  if (intensity <= 0) return sortedCells;
+  // High-intensity map types almost always have holes/corridors; low ones are often solid.
+  if (Math.random() > intensity) return sortedCells;
+
   const protectCount = 18; // shield the army rows top & bottom
   const protectedSet = new Set([
     ...sortedCells.slice(0, protectCount),
@@ -252,7 +257,8 @@ function punchHoles(sortedCells: string[]): string[] {
   ]);
   const active = new Set(sortedCells);
   const minCells = 40;
-  const numHoles = 2 + Math.floor(Math.random() * 4); // 2-5 holes
+  const numHoles = 1 + Math.floor(Math.random() * (2 + Math.round(intensity * 4))); // ~1-6 by intensity
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
   const interiorCandidates = () =>
     Array.from(active).filter(
@@ -264,19 +270,37 @@ function punchHoles(sortedCells: string[]): string[] {
     const cands = interiorCandidates();
     if (!cands.length) break;
     const seed = cands[Math.floor(Math.random() * cands.length)];
-    const holeSize = 1 + Math.floor(Math.random() * 3); // 1-3 cells
     const hole: string[] = [seed];
-    const frontier = [seed];
-    while (hole.length < holeSize) {
-      const from = frontier[Math.floor(Math.random() * frontier.length)];
-      const opts = cellNeighbors(from).filter(
-        n => active.has(n) && !protectedSet.has(n) && !hole.includes(n)
-      );
-      if (!opts.length) break;
-      const pick = opts[Math.floor(Math.random() * opts.length)];
-      hole.push(pick);
-      frontier.push(pick);
+
+    // Some gaps are straight corridors/passageways; the rest are small organic blobs.
+    const corridor = Math.random() < intensity * 0.6;
+    if (corridor) {
+      const [dr, dc] = dirs[Math.floor(Math.random() * dirs.length)];
+      const len = 3 + Math.floor(Math.random() * 3); // 3-5 cells
+      let cur = seed;
+      while (hole.length < len) {
+        const [r, c] = cur.split(',').map(Number);
+        const next = `${r + dr},${c + dc}`;
+        if (active.has(next) && !protectedSet.has(next) && !hole.includes(next)) {
+          hole.push(next);
+          cur = next;
+        } else break;
+      }
+    } else {
+      const holeSize = 1 + Math.floor(Math.random() * 3); // 1-3 cells
+      const frontier = [seed];
+      while (hole.length < holeSize) {
+        const from = frontier[Math.floor(Math.random() * frontier.length)];
+        const opts = cellNeighbors(from).filter(
+          n => active.has(n) && !protectedSet.has(n) && !hole.includes(n)
+        );
+        if (!opts.length) break;
+        const pick = opts[Math.floor(Math.random() * opts.length)];
+        hole.push(pick);
+        frontier.push(pick);
+      }
     }
+
     if (active.size - hole.length >= minCells) {
       hole.forEach(c => active.delete(c));
       // Keep the board as a single connected piece: undo this hole if it split the board.
@@ -289,45 +313,8 @@ function punchHoles(sortedCells: string[]): string[] {
   return Array.from(active);
 }
 
-// Fill any empty cells fully enclosed by the board so the interior has no uninhabitable holes
-function fillInteriorHoles(cells: string[]): string[] {
-  const active = new Set(cells);
-  const reachable = new Set<string>();
-  const queue: [number, number][] = [];
-  for (let r = 0; r < GRID_SIZE; r++) {
-    for (let c = 0; c < GRID_SIZE; c++) {
-      if (r === 0 || c === 0 || r === GRID_SIZE - 1 || c === GRID_SIZE - 1) {
-        const k = `${r},${c}`;
-        if (!active.has(k) && !reachable.has(k)) {
-          reachable.add(k);
-          queue.push([r, c]);
-        }
-      }
-    }
-  }
-  while (queue.length) {
-    const [r, c] = queue.shift()!;
-    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const nr = r + dr, nc = c + dc;
-      if (nr < 0 || nc < 0 || nr >= GRID_SIZE || nc >= GRID_SIZE) continue;
-      const k = `${nr},${nc}`;
-      if (!active.has(k) && !reachable.has(k)) {
-        reachable.add(k);
-        queue.push([nr, nc]);
-      }
-    }
-  }
-  for (let r = 0; r < GRID_SIZE; r++) {
-    for (let c = 0; c < GRID_SIZE; c++) {
-      const k = `${r},${c}`;
-      if (!active.has(k) && !reachable.has(k)) active.add(k);
-    }
-  }
-  return Array.from(active);
-}
-
 // Generate a random board shape with armies placed on it
-function generateBoard(_withObstacles: boolean): { active: string[]; board: BoardState; blocked: string[] } {
+function generateBoard(holeIntensity: number): { active: string[]; board: BoardState; blocked: string[] } {
   const sortFn = (a: string, b: string) => {
     const [ra, ca] = a.split(',').map(Number);
     const [rb, cb] = b.split(',').map(Number);
@@ -335,7 +322,10 @@ function generateBoard(_withObstacles: boolean): { active: string[]; board: Boar
   };
 
   let cells = generateShape();
-  cells = fillInteriorHoles(cells);
+  cells.sort(sortFn);
+
+  // Holes & corridors (empty interior gaps, never special tiles) at a theme-appropriate rate.
+  cells = punchHoles(cells, holeIntensity);
   cells.sort(sortFn);
 
   const blocked: string[] = [];
@@ -366,11 +356,9 @@ function loadSavedState(): { active: string[]; board: BoardState; currentTurn: '
     if (Array.isArray(parsed.active) && parsed.board && typeof parsed.board === 'object') {
       const activeArr: string[] = parsed.active;
       const activeSet = new Set(activeArr);
-      // Normalize: blocked cells can never overlap active cells, and no piece
-      // may sit on a non-active (carved/blocked) square — guards against stale state.
-      const blocked: string[] = (Array.isArray(parsed.blocked) ? parsed.blocked : []).filter(
-        (c: string) => !activeSet.has(c)
-      );
+      // Special hazard tiles are retired — drop any legacy `blocked` cells from old saves
+      // so the board is only tiles + empty holes (no special squares).
+      const blocked: string[] = [];
       const board: BoardState = {};
       for (const [sq, pieces] of Object.entries(parsed.board as BoardState)) {
         if (activeSet.has(sq)) board[sq] = pieces;
@@ -397,7 +385,7 @@ export default function Home() {
     const saved = loadSavedState();
     if (saved) return saved;
     const t = THEMES.find(x => x.id === DEFAULT_THEME) || THEMES[0];
-    const g = generateBoard(t.obstacles);
+    const g = generateBoard(t.holeIntensity);
     return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null, embattled: [] as string[], blocked: g.blocked, theme: DEFAULT_THEME, pieceSet: DEFAULT_SET };
   });
   const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
@@ -689,7 +677,7 @@ export default function Home() {
       clearTimeout(combatTimeoutRef.current);
       combatTimeoutRef.current = null;
     }
-    const { active, board: newBoard, blocked: newBlocked } = generateBoard(currentTheme.obstacles);
+    const { active, board: newBoard, blocked: newBlocked } = generateBoard(currentTheme.holeIntensity);
     setActiveSquares(active);
     setBoard(newBoard);
     setBlocked(newBlocked);
@@ -710,7 +698,7 @@ export default function Home() {
       clearTimeout(combatTimeoutRef.current);
       combatTimeoutRef.current = null;
     }
-    const { active, board: newBoard, blocked: newBlocked } = generateBoard(t.obstacles);
+    const { active, board: newBoard, blocked: newBlocked } = generateBoard(t.holeIntensity);
     setTheme(id);
     setActiveSquares(active);
     setBoard(newBoard);
@@ -722,9 +710,7 @@ export default function Home() {
     setEmbattled([]);
     toast({
       title: t.label,
-      description: t.obstacles
-        ? "A new battlefield rises — beware the hazards within."
-        : "A new battlefield rises in this realm.",
+      description: "A new battlefield rises in this realm.",
     });
   };
 

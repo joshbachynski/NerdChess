@@ -539,7 +539,8 @@ export default function Home() {
       }
     }
 
-    setCurrentTurn(prev => prev === 'white' ? 'black' : 'white');
+    // Turn follows whoever just acted: after a white attacker it's black's turn, and vice versa.
+    setCurrentTurn(isWhitePiece(result.attacker) ? 'black' : 'white');
 
     const attackerName = PIECE_STATS[result.attacker].name;
     const defenderName = PIECE_STATS[result.defender].name;
@@ -642,7 +643,8 @@ export default function Home() {
         return newBoard;
       });
 
-      setCurrentTurn(prev => prev === 'white' ? 'black' : 'white');
+      // Turn follows whoever just moved: after a white piece moves it's black's turn, and vice versa.
+      setCurrentTurn(isWhitePiece(piece) ? 'black' : 'white');
     }
 
     setDraggedPiece(null);
@@ -843,19 +845,34 @@ export default function Home() {
             </div>
 
             <div className="flex items-center gap-4 py-4 border-y border-white/10">
-              <div className={`p-3 rounded-xl transition-all duration-300 ${currentTurn === 'white' ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.3)]' : 'bg-white/5 text-white/50'}`}>
+              <button
+                type="button"
+                onClick={() => setCurrentTurn('white')}
+                title="Set turn to White"
+                data-testid="button-turn-white"
+                className={`p-3 rounded-xl transition-all duration-300 text-left cursor-pointer ${currentTurn === 'white' ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.3)]' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>
                 <div className="text-xs font-bold uppercase tracking-wider mb-1">White</div>
                 <div className="font-mono text-lg">Player 1</div>
-              </div>
-              <div className="flex-1 h-px bg-white/10 relative">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Swords className="w-4 h-4 text-white/40 bg-slate-900 px-1 box-content" />
-                </div>
-              </div>
-              <div className={`p-3 rounded-xl transition-all duration-300 ${currentTurn === 'black' ? 'bg-black text-white shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-white/20' : 'bg-white/5 text-white/50'}`}>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentTurn(prev => prev === 'white' ? 'black' : 'white')}
+                title="Switch turn"
+                aria-label="Switch turn"
+                data-testid="button-turn-toggle"
+                className="flex-1 h-10 relative flex items-center justify-center cursor-pointer group">
+                <div className="absolute inset-x-0 top-1/2 h-px bg-white/10" />
+                <Swords className="relative w-4 h-4 text-white/40 group-hover:text-white/80 transition-colors bg-slate-900 px-1 box-content" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentTurn('black')}
+                title="Set turn to Black"
+                data-testid="button-turn-black"
+                className={`p-3 rounded-xl transition-all duration-300 text-left cursor-pointer ${currentTurn === 'black' ? 'bg-black text-white shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-white/20' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>
                 <div className="text-xs font-bold uppercase tracking-wider mb-1">Black</div>
                 <div className="font-mono text-lg">Player 2</div>
-              </div>
+              </button>
             </div>
 
             <div className="space-y-2 text-xs">

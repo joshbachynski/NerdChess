@@ -5,6 +5,7 @@ import { RotateCcw, Swords, Shuffle, Volume2, VolumeX, Music, Dice1, Dice2, Dice
 import { toast } from "@/hooks/use-toast";
 import { playSound, isMuted, toggleMuted, isMusicOn, toggleMusic, initMusicAutoStart } from "@/lib/sounds";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Coin } from "@/components/Coin";
 import meadowTile from "@assets/generated_images/tile_meadow.png";
 import scifiTile from "@assets/generated_images/tile_scifi.png";
 import cityTile from "@assets/generated_images/tile_city.png";
@@ -111,6 +112,13 @@ interface BoardState {
   [square: string]: PieceType[];
 }
 
+interface PlayerScore {
+  captured: number;
+  defended: number;
+}
+
+type ScoreBoard = Record<PlayerColor, PlayerScore>;
+
 type CombatOutcome = 'capture' | 'repelled_destroyed' | 'embattled';
 
 interface CombatResult {
@@ -134,6 +142,47 @@ const PIECE_STATS: { [key in PieceKind]: { attack: number; defense: number; name
   'Q': { attack: 5, defense: 4, name: 'Queen' },
   'K': { attack: 6, defense: 2, name: 'King' },
 };
+
+const PIECE_POINT_VALUES: { [key in PieceKind]: number } = {
+  'P': 1,
+  'N': 3,
+  'B': 3,
+  'R': 5,
+  'Q': 9,
+  'K': 20,
+};
+
+const emptyScoreBoard = (): ScoreBoard =>
+  PLAYER_ORDER.reduce((scores, color) => {
+    scores[color] = { captured: 0, defended: 0 };
+    return scores;
+  }, {} as ScoreBoard);
+
+const normalizeScoreBoard = (raw: unknown): ScoreBoard => {
+  const scores = emptyScoreBoard();
+  if (!raw || typeof raw !== 'object') return scores;
+
+  for (const color of PLAYER_ORDER) {
+    const score = (raw as Partial<Record<PlayerColor, Partial<PlayerScore>>>)[color];
+    if (!score || typeof score !== 'object') continue;
+    scores[color] = {
+      captured: typeof score.captured === 'number' ? score.captured : 0,
+      defended: typeof score.defended === 'number' ? score.defended : 0,
+    };
+  }
+
+  return scores;
+};
+
+const addScore = (scores: ScoreBoard, color: PlayerColor, bucket: keyof PlayerScore, points: number): ScoreBoard => ({
+  ...scores,
+  [color]: {
+    ...scores[color],
+    [bucket]: scores[color][bucket] + points,
+  },
+});
+
+const scoreTotal = (score: PlayerScore): number => score.captured + score.defended;
 
 // Back-rank layout shared by every army (mirrored per edge during placement).
 const BACK_RANK: PieceKind[] = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
@@ -371,6 +420,7 @@ interface SavedState {
   winner: PlayerColor | null;
   embattled: string[];
   blocked: string[];
+  scores: ScoreBoard;
   numPlayers: number;
   theme: string;
   pieceSet: string;
@@ -400,6 +450,7 @@ function loadSavedState(): SavedState | null {
       winner: isColor(parsed.winner) ? parsed.winner : null,
       embattled: (Array.isArray(parsed.embattled) ? parsed.embattled : []).filter((c: string) => activeSet.has(c)),
       blocked: [],
+      scores: normalizeScoreBoard(parsed.scores),
       numPlayers,
       theme: THEMES.some(t => t.id === parsed.theme) ? parsed.theme : DEFAULT_THEME,
       pieceSet: PIECE_SETS.some(s => s.id === parsed.pieceSet) ? parsed.pieceSet : DEFAULT_SET,
@@ -416,7 +467,7 @@ export default function Home() {
     if (saved) return saved;
     const t = THEMES.find(x => x.id === DEFAULT_THEME) || THEMES[0];
     const g = generateBoard(t.holeIntensity, 2);
-    return { active: g.active, board: g.board, currentTurn: 'white', winner: null, embattled: [], blocked: [], numPlayers: 2, theme: DEFAULT_THEME, pieceSet: DEFAULT_SET };
+    return { active: g.active, board: g.board, currentTurn: 'white', winner: null, embattled: [], blocked: [], scores: emptyScoreBoard(), numPlayers: 2, theme: DEFAULT_THEME, pieceSet: DEFAULT_SET };
   });
   const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
   const [board, setBoard] = useState<BoardState>(initState.board);
@@ -427,6 +478,7 @@ export default function Home() {
   const [isAnimating, setIsAnimating] = useState(false);
   const [winner, setWinner] = useState<PlayerColor | null>(initState.winner);
   const [embattled, setEmbattled] = useState<string[]>(initState.embattled);
+  const [scores, setScores] = useState<ScoreBoard>(initState.scores);
   const [numPlayers, setNumPlayers] = useState<number>(initState.numPlayers);
   const [theme, setTheme] = useState<string>(initState.theme);
   const [pieceSet, setPieceSet] = useState<string>(initState.pieceSet);
@@ -451,11 +503,11 @@ export default function Home() {
   // Persist game state so a page reload / hot-reload never loses the game
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled, blocked: [], numPlayers, theme, pieceSet }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled, blocked: [], scores, numPlayers, theme, pieceSet }));
     } catch {
       // ignore storage failures
     }
-  }, [activeSquares, board, currentTurn, winner, embattled, numPlayers, theme, pieceSet]);
+  }, [activeSquares, board, currentTurn, winner, embattled, scores, numPlayers, theme, pieceSet]);
 
   useEffect(() => {
     return () => {
@@ -551,9 +603,11 @@ export default function Home() {
       removeOne(result.from, result.attacker);
       removeOne(result.to, result.defender);
       addOne(result.to, result.attacker);
+      setScores(prev => addScore(prev, pieceColor(result.attacker), 'captured', PIECE_POINT_VALUES[pieceKind(result.defender)]));
     } else if (result.outcome === 'repelled_destroyed') {
       // Attacker beaten -> attacker is destroyed
       removeOne(result.from, result.attacker);
+      setScores(prev => addScore(prev, pieceColor(result.defender), 'defended', PIECE_POINT_VALUES[pieceKind(result.attacker)]));
     } else {
       // Embattled: attacker charges in (if not already there); both lock on the square
       if (result.from !== result.to) {
@@ -744,6 +798,7 @@ export default function Home() {
     setIsAnimating(false);
     setWinner(null);
     setEmbattled([]);
+    setScores(emptyScoreBoard());
   };
 
   const regenerate = () => {
@@ -976,15 +1031,58 @@ export default function Home() {
               </div>
             </div>
 
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-white/60 font-semibold uppercase tracking-wider text-xs">
+                <span className="flex items-center -space-x-1">
+                  <Coin variant="attack" size={18} animated={false} />
+                  <Coin variant="defense" size={18} animated={false} />
+                </span>
+                Points
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {playersInGame.map((color) => {
+                  const score = scores[color];
+                  const eliminated = !aliveColors.has(color);
+                  return (
+                    <div
+                      key={color}
+                      className={`rounded-lg border p-2 bg-white/5 transition-all ${currentTurn === color ? 'border-white/30 bg-white/10' : 'border-white/10'} ${eliminated ? 'opacity-50' : ''}`}
+                      data-testid={`score-card-${color}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: FACTIONS[color].ring, boxShadow: '0 0 0 1px rgba(255,255,255,0.45)' }} />
+                          <span className="truncate text-xs font-bold uppercase tracking-wider">{FACTIONS[color].label}</span>
+                        </div>
+                        <div className="font-mono text-lg font-bold text-white" data-testid={`score-total-${color}`}>
+                          {scoreTotal(score)}
+                        </div>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px] text-white/50">
+                        <div className="flex items-center gap-1" data-testid={`score-captured-${color}`}>
+                          <Coin variant="attack" value={score.captured} size={30} animated={false} />
+                          <span>Took</span>
+                        </div>
+                        <div className="flex items-center gap-1" data-testid={`score-defended-${color}`}>
+                          <Coin variant="defense" value={score.defended} size={30} animated={false} />
+                          <span>Defended</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="space-y-2 text-xs">
-              <div className="text-white/60 font-semibold uppercase tracking-wider">Piece Stats (Atk/Def)</div>
+              <div className="text-white/60 font-semibold uppercase tracking-wider">Piece Stats (Atk/Def/Pts)</div>
               <div className="grid grid-cols-2 gap-1 text-white/50">
-                <span>♙ Pawn: 1/2</span>
-                <span>♖ Rook: 1/5</span>
-                <span>♘ Knight: 4/2</span>
-                <span>♗ Bishop: 3/3</span>
-                <span>♕ Queen: 5/4</span>
-                <span>♔ King: 6/2</span>
+                <span>Pawn: 1/2/1</span>
+                <span>Rook: 1/5/5</span>
+                <span>Knight: 4/2/3</span>
+                <span>Bishop: 3/3/3</span>
+                <span>Queen: 5/4/9</span>
+                <span>King: 6/2/20</span>
               </div>
               <div className="text-white/40 text-xs mt-2">
                 Roll ≤ stat on d6 to succeed. Defender wins ties.

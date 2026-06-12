@@ -2,15 +2,14 @@ import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { Coin } from "@/components/Coin";
 
-// Different sizes for different pieces — a captured Queen mints a bigger coin
-// than a Pawn. Values here are illustrative; wire your own scoring later.
+// Different sizes for different pieces, matching the live score values on the board.
 const PIECES = [
   { piece: "Pawn", size: 46, capture: 1, defense: 1 },
-  { piece: "Knight", size: 58, capture: 3, defense: 2 },
-  { piece: "Bishop", size: 62, capture: 3, defense: 2 },
-  { piece: "Rook", size: 72, capture: 5, defense: 3 },
-  { piece: "Queen", size: 88, capture: 9, defense: 4 },
-  { piece: "King", size: 100, capture: 12, defense: 5 },
+  { piece: "Knight", size: 58, capture: 3, defense: 3 },
+  { piece: "Bishop", size: 62, capture: 3, defense: 3 },
+  { piece: "Rook", size: 72, capture: 5, defense: 5 },
+  { piece: "Queen", size: 88, capture: 9, defense: 9 },
+  { piece: "King", size: 100, capture: 20, defense: 20 },
 ];
 
 function Section({
@@ -60,9 +59,7 @@ export default function Coins() {
           </h1>
           <p className="max-w-2xl font-light text-white/60">
             Minted coins for the spoils of war. Capture coins are struck in gold; defense coins in
-            tempered steel. Bigger pieces mint bigger coins. These are graphics only — drop the{" "}
-            <code className="rounded bg-white/10 px-1.5 py-0.5 text-amber-200">Coin</code> component in
-            wherever your scoring fires.
+            tempered steel. Bigger pieces mint bigger coins. Live board scores use these same values.
           </p>
         </header>
 
@@ -73,7 +70,7 @@ export default function Coins() {
             <span className="text-sm text-white/70">Capture</span>
           </div>
           <div className="flex flex-col items-center gap-3">
-            <Coin variant="defense" value={4} size={130} />
+            <Coin variant="defense" value={9} size={130} />
             <span className="text-sm text-white/70">Defense</span>
           </div>
         </div>
@@ -99,7 +96,7 @@ export default function Coins() {
 <Coin variant="attack"  value={9} size={COIN_SIZES.queen} />
 
 // when a piece defends successfully:
-<Coin variant="defense" value={4} size={COIN_SIZES.queen} />`}</pre>
+<Coin variant="defense" value={9} size={COIN_SIZES.queen} />`}</pre>
         </div>
       </div>
     </div>

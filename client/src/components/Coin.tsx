@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useEffect, useRef, type CSSProperties } from "react";
 import { Swords, Shield } from "lucide-react";
 
 export type CoinVariant = "attack" | "defense";
@@ -12,6 +12,8 @@ export interface CoinProps {
   size?: number;
   /** Slow float + shine sweep. Defaults to true. */
   animated?: boolean;
+  /** Continuous 3D coin-flip spin (best for a value-less medallion). Defaults to false. */
+  spin?: boolean;
   className?: string;
 }
 
@@ -50,7 +52,7 @@ const THEME: Record<CoinVariant, {
   },
 };
 
-export function Coin({ variant, value, size = 64, animated = true, className = "" }: CoinProps) {
+export function Coin({ variant, value, size = 64, animated = true, spin = false, className = "" }: CoinProps) {
   const uid = useId().replace(/[:]/g, "");
   const t = THEME[variant];
   const Emblem = variant === "attack" ? Swords : Shield;
@@ -62,7 +64,7 @@ export function Coin({ variant, value, size = 64, animated = true, className = "
 
   return (
     <div
-      className={`coin ${animated ? "coin--anim" : ""} ${className}`}
+      className={`coin ${animated && !spin ? "coin--anim" : ""} ${spin ? "coin--spin" : ""} ${className}`}
       style={{ width: size, height: size }}
       data-testid={`coin-${variant}${hasValue ? `-${value}` : ""}`}
       role="img"
@@ -121,6 +123,70 @@ export function Coin({ variant, value, size = 64, animated = true, className = "
       </div>
 
       {animated && <span className="coin__shine" />}
+    </div>
+  );
+}
+
+const SPARK_COLOR: Record<CoinVariant, string> = { attack: "#ffe27a", defense: "#cfe8ff" };
+const PLUS_COLOR: Record<CoinVariant, string> = { attack: "#ffd15a", defense: "#bfe0ff" };
+
+export interface CoinBurstProps {
+  variant: CoinVariant;
+  value: number;
+  size?: number;
+  /** Called once the burst finishes (~1.3s) so you can unmount it. */
+  onDone?: () => void;
+}
+
+/**
+ * A one-shot "reward earned" animation: the coin flips + bounces in, sparks fly
+ * out, a shockwave ring expands, and a "+value" floats up. Mount it where the
+ * reward happens (give it a changing `key` to replay).
+ */
+export function CoinBurst({ variant, value, size = 72, onDone }: CoinBurstProps) {
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+
+  // Fire once on mount; using a ref means an unmemoized `onDone` from the caller
+  // can't restart this timer on re-render (which would keep the burst from unmounting).
+  useEffect(() => {
+    const id = window.setTimeout(() => onDoneRef.current?.(), 1300);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  const SPARKS = 9;
+  const sparks = Array.from({ length: SPARKS }, (_, i) => {
+    const ang = (i / SPARKS) * Math.PI * 2 + 0.35;
+    const dist = size * (0.72 + (i % 2) * 0.22);
+    return { tx: Math.cos(ang) * dist, ty: Math.sin(ang) * dist, delay: (i % 3) * 0.04 };
+  });
+
+  return (
+    <div
+      className="coin-burst"
+      style={{ width: size, height: size, color: PLUS_COLOR[variant] }}
+      data-testid={`coin-burst-${variant}`}
+    >
+      <span className="coin-burst__wave" />
+      <div className="coin-burst__coin">
+        <Coin variant={variant} value={value} size={size} animated={false} />
+      </div>
+      {sparks.map((s, i) => (
+        <span
+          key={i}
+          className="coin-burst__spark"
+          style={{
+            background: SPARK_COLOR[variant],
+            boxShadow: `0 0 6px ${SPARK_COLOR[variant]}`,
+            animationDelay: `${s.delay}s`,
+            "--tx": `${s.tx}px`,
+            "--ty": `${s.ty}px`,
+          } as CSSProperties}
+        />
+      ))}
+      <span className="coin-burst__plus" style={{ fontSize: size * 0.3 }}>
+        +{value}
+      </span>
     </div>
   );
 }

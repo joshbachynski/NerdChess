@@ -149,3 +149,86 @@
   .coin--anim { animation: none; }
   .coin__shine { animation: none; opacity: 0; }
 }
+
+/* ---------- Coin: spinning medallion ---------- */
+@keyframes coin-spin {
+  0% { transform: perspective(440px) rotateY(0deg); }
+  100% { transform: perspective(440px) rotateY(360deg); }
+}
+.coin--spin { animation: coin-spin 2.6s linear infinite; }
+
+/* ---------- Coin: "reward earned" burst ---------- */
+.coin-burst {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  perspective: 600px;
+}
+.coin-burst__coin {
+  animation: coin-pop 0.8s cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+  transform-style: preserve-3d;
+}
+@keyframes coin-pop {
+  0%   { transform: scale(0.2) rotateY(0deg); opacity: 0; }
+  35%  { transform: scale(1.25) rotateY(300deg); opacity: 1; }
+  70%  { transform: scale(0.94) rotateY(560deg); }
+  100% { transform: scale(1) rotateY(720deg); opacity: 1; }
+}
+.coin-burst__wave {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0;
+  animation: coin-wave 0.7s ease-out both;
+}
+@keyframes coin-wave {
+  0%   { transform: scale(0.4); opacity: 0.7; }
+  100% { transform: scale(2.3); opacity: 0; }
+}
+.coin-burst__spark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8%;
+  height: 8%;
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: coin-spark 0.85s ease-out both;
+}
+@keyframes coin-spark {
+  0%   { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1); opacity: 0; }
+}
+.coin-burst__plus {
+  position: absolute;
+  font-family: var(--font-mono), monospace;
+  font-weight: 800;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  animation: coin-rise 1.1s ease-out both;
+  animation-delay: 0.12s;
+}
+@keyframes coin-rise {
+  0%   { transform: translateY(10px) scale(0.6); opacity: 0; }
+  25%  { transform: translateY(-8px) scale(1.1); opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateY(-54px) scale(1); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coin--spin,
+  .coin-burst__coin,
+  .coin-burst__wave,
+  .coin-burst__spark,
+  .coin-burst__plus {
+    animation: none;
+  }
+  .coin-burst__wave,
+  .coin-burst__spark { opacity: 0; }
+  .coin-burst__coin { transform: none; opacity: 1; }
+  .coin-burst__plus { opacity: 1; }
+}

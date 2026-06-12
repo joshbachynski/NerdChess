@@ -5,7 +5,7 @@ import { RotateCcw, Swords, Shuffle, Volume2, VolumeX, Music, Dice1, Dice2, Dice
 import { toast } from "@/hooks/use-toast";
 import { playSound, isMuted, toggleMuted, isMusicOn, toggleMusic, initMusicAutoStart } from "@/lib/sounds";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Coin } from "@/components/Coin";
+import { Coin, CoinBurst, type CoinVariant } from "@/components/Coin";
 import meadowTile from "@assets/generated_images/tile_meadow.png";
 import scifiTile from "@assets/generated_images/tile_scifi.png";
 import cityTile from "@assets/generated_images/tile_city.png";
@@ -118,6 +118,13 @@ interface PlayerScore {
 }
 
 type ScoreBoard = Record<PlayerColor, PlayerScore>;
+
+interface ScoreBurst {
+  id: number;
+  color: PlayerColor;
+  variant: CoinVariant;
+  value: number;
+}
 
 type CombatOutcome = 'capture' | 'repelled_destroyed' | 'embattled';
 
@@ -479,6 +486,7 @@ export default function Home() {
   const [winner, setWinner] = useState<PlayerColor | null>(initState.winner);
   const [embattled, setEmbattled] = useState<string[]>(initState.embattled);
   const [scores, setScores] = useState<ScoreBoard>(initState.scores);
+  const [scoreBurst, setScoreBurst] = useState<ScoreBurst | null>(null);
   const [numPlayers, setNumPlayers] = useState<number>(initState.numPlayers);
   const [theme, setTheme] = useState<string>(initState.theme);
   const [pieceSet, setPieceSet] = useState<string>(initState.pieceSet);
@@ -603,11 +611,17 @@ export default function Home() {
       removeOne(result.from, result.attacker);
       removeOne(result.to, result.defender);
       addOne(result.to, result.attacker);
-      setScores(prev => addScore(prev, pieceColor(result.attacker), 'captured', PIECE_POINT_VALUES[pieceKind(result.defender)]));
+      const points = PIECE_POINT_VALUES[pieceKind(result.defender)];
+      const scorer = pieceColor(result.attacker);
+      setScores(prev => addScore(prev, scorer, 'captured', points));
+      setScoreBurst({ id: Date.now(), color: scorer, variant: 'attack', value: points });
     } else if (result.outcome === 'repelled_destroyed') {
       // Attacker beaten -> attacker is destroyed
       removeOne(result.from, result.attacker);
-      setScores(prev => addScore(prev, pieceColor(result.defender), 'defended', PIECE_POINT_VALUES[pieceKind(result.attacker)]));
+      const points = PIECE_POINT_VALUES[pieceKind(result.attacker)];
+      const scorer = pieceColor(result.defender);
+      setScores(prev => addScore(prev, scorer, 'defended', points));
+      setScoreBurst({ id: Date.now(), color: scorer, variant: 'defense', value: points });
     } else {
       // Embattled: attacker charges in (if not already there); both lock on the square
       if (result.from !== result.to) {
@@ -799,6 +813,7 @@ export default function Home() {
     setWinner(null);
     setEmbattled([]);
     setScores(emptyScoreBoard());
+    setScoreBurst(null);
   };
 
   const regenerate = () => {
@@ -1046,9 +1061,19 @@ export default function Home() {
                   return (
                     <div
                       key={color}
-                      className={`rounded-lg border p-2 bg-white/5 transition-all ${currentTurn === color ? 'border-white/30 bg-white/10' : 'border-white/10'} ${eliminated ? 'opacity-50' : ''}`}
+                      className={`relative rounded-lg border p-2 bg-white/5 transition-all ${currentTurn === color ? 'border-white/30 bg-white/10' : 'border-white/10'} ${eliminated ? 'opacity-50' : ''}`}
                       data-testid={`score-card-${color}`}
                     >
+                      {scoreBurst?.color === color && (
+                        <div className="pointer-events-none absolute -right-2 -top-5 z-30" key={scoreBurst.id}>
+                          <CoinBurst
+                            variant={scoreBurst.variant}
+                            value={scoreBurst.value}
+                            size={54}
+                            onDone={() => setScoreBurst(prev => prev?.id === scoreBurst.id ? null : prev)}
+                          />
+                        </div>
+                      )}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: FACTIONS[color].ring, boxShadow: '0 0 0 1px rgba(255,255,255,0.45)' }} />

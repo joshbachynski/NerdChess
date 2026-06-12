@@ -525,8 +525,8 @@ export default function Home() {
         const target = 1120;
         // Container padding is p-4 (16px) / lg:p-8 (32px) per side; account for both sides.
         const pad = window.innerWidth >= 1024 ? 32 : 16;
-        // Reserve room on the right for the fixed legend panel (22rem + gap) so the board never slides under it.
-        const reserved = 392;
+        // Reserve room on the right for the fixed legend panel (24rem + gap) so the board never slides under it.
+        const reserved = 424;
         const maxW = window.innerWidth - reserved - pad * 2;
         const maxH = window.innerHeight - pad * 2;
         setBoardWidth(Math.min(target, maxW, maxH));
@@ -985,7 +985,7 @@ export default function Home() {
       <div className="relative z-10 w-full flex items-center justify-start">
 
         {/* Game Info Panel (legend) — fixed in the top-right corner, capped to viewport height */}
-        <div className="fixed top-2 right-2 z-40 w-[22rem]">
+        <div className="fixed top-2 right-2 z-40 w-[24rem]">
           <Card className="glass-card p-4 space-y-4 text-white border-white/10 max-h-[calc(100vh-1rem)] overflow-y-auto">
             <div className="space-y-2">
               <div className="flex items-start justify-between gap-2">
@@ -1083,14 +1083,14 @@ export default function Home() {
                           {scoreTotal(score)}
                         </div>
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10px] text-white/50">
+                      <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[10px] text-white/50">
                         <div className="flex items-center gap-1" data-testid={`score-captured-${color}`}>
                           <Coin variant="attack" value={score.captured} size={30} animated={false} />
                           <span>Took</span>
                         </div>
                         <div className="flex items-center gap-1" data-testid={`score-defended-${color}`}>
                           <Coin variant="defense" value={score.defended} size={30} animated={false} />
-                          <span>Defended</span>
+                          <span>Defend</span>
                         </div>
                       </div>
                     </div>

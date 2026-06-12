@@ -631,6 +631,11 @@ export default function Home() {
     }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', `${piece}|${square}`);
+    // Give the drag a ghost of only this single piece. Without this, Chromium
+    // snapshots the entire filtered board subtree (every piece) as the drag image.
+    const el = e.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    e.dataTransfer.setDragImage(el, e.clientX - rect.left, e.clientY - rect.top);
     setDraggedPiece({ piece, from: square });
   }, [isAnimating, winner, embattled]);
 

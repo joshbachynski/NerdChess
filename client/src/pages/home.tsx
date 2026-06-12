@@ -5,7 +5,7 @@ import { RotateCcw, Swords, Shuffle, Volume2, VolumeX, Music, Dice1, Dice2, Dice
 import { toast } from "@/hooks/use-toast";
 import { playSound, isMuted, toggleMuted, isMusicOn, toggleMusic, initMusicAutoStart } from "@/lib/sounds";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Coin } from "@/components/Coin";
+import { Coin, CoinBurst, type CoinVariant } from "@/components/Coin";
 import meadowTile from "@assets/generated_images/tile_meadow.png";
 import scifiTile from "@assets/generated_images/tile_scifi.png";
 import cityTile from "@assets/generated_images/tile_city.png";
@@ -476,6 +476,8 @@ export default function Home() {
   const [boardWidth, setBoardWidth] = useState(500);
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [bursts, setBursts] = useState<{ id: number; variant: CoinVariant; value: number }[]>([]);
+  const burstIdRef = useRef(0);
   const [winner, setWinner] = useState<PlayerColor | null>(initState.winner);
   const [embattled, setEmbattled] = useState<string[]>(initState.embattled);
   const [scores, setScores] = useState<ScoreBoard>(initState.scores);
@@ -603,11 +605,15 @@ export default function Home() {
       removeOne(result.from, result.attacker);
       removeOne(result.to, result.defender);
       addOne(result.to, result.attacker);
-      setScores(prev => addScore(prev, pieceColor(result.attacker), 'captured', PIECE_POINT_VALUES[pieceKind(result.defender)]));
+      const capturePts = PIECE_POINT_VALUES[pieceKind(result.defender)];
+      setScores(prev => addScore(prev, pieceColor(result.attacker), 'captured', capturePts));
+      setBursts(prev => [...prev, { id: ++burstIdRef.current, variant: 'attack', value: capturePts }]);
     } else if (result.outcome === 'repelled_destroyed') {
       // Attacker beaten -> attacker is destroyed
       removeOne(result.from, result.attacker);
-      setScores(prev => addScore(prev, pieceColor(result.defender), 'defended', PIECE_POINT_VALUES[pieceKind(result.attacker)]));
+      const defendPts = PIECE_POINT_VALUES[pieceKind(result.attacker)];
+      setScores(prev => addScore(prev, pieceColor(result.defender), 'defended', defendPts));
+      setBursts(prev => [...prev, { id: ++burstIdRef.current, variant: 'defense', value: defendPts }]);
     } else {
       // Embattled: attacker charges in (if not already there); both lock on the square
       if (result.from !== result.to) {
@@ -799,6 +805,7 @@ export default function Home() {
     setWinner(null);
     setEmbattled([]);
     setScores(emptyScoreBoard());
+    setBursts([]);
   };
 
   const regenerate = () => {
@@ -899,6 +906,24 @@ export default function Home() {
               Play Again
             </Button>
           </Card>
+        </div>
+      )}
+
+      {/* Reward burst — celebratory coin animation when points are scored */}
+      {bursts.length > 0 && (
+        <div
+          className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center"
+          data-testid="coin-burst-overlay"
+        >
+          {bursts.map((b) => (
+            <CoinBurst
+              key={b.id}
+              variant={b.variant}
+              value={b.value}
+              size={150}
+              onDone={() => setBursts((prev) => prev.filter((x) => x.id !== b.id))}
+            />
+          ))}
         </div>
       )}
 

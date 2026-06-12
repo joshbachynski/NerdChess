@@ -226,3 +226,169 @@ export function playSound(name: SoundName): void {
     // never let audio errors break gameplay
   }
 }
+
+// ---------------------------------------------------------------------------
+// Background music: a looping 8-bit chiptune sequence, synthesized live with
+// the same square/triangle voices as the SFX. No files, seamless loop. Music
+// has its own bus and on/off preference, independent of the SFX mute.
+// ---------------------------------------------------------------------------
+
+const MUSIC_KEY = 'nerd-chess-music';
+const MUSIC_LEVEL = 0.14;          // music sits gently under the SFX
+const BPM = 132;
+const STEP = 60 / BPM / 4;         // one sixteenth note, in seconds
+const LOOKAHEAD = 0.2;             // schedule this far ahead (s)
+
+let musicEnabled = false;          // persisted user preference
+let musicPlaying = false;          // is the scheduler actually running
+let musicBus: GainNode | null = null;
+let musicTimer: number | null = null;
+let nextStepTime = 0;
+let stepIndex = 0;
+
+try {
+  musicEnabled = localStorage.getItem(MUSIC_KEY) === 'true';
+} catch {
+  // ignore storage failures
+}
+
+const midi = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+
+// vi–IV–I–V progression (Am F C G), one bar each — a classic heroic loop.
+const PROG = [
+  { bass: 45, tones: [69, 72, 76, 81] }, // Am  (A2 | A4 C5 E5 A5)
+  { bass: 41, tones: [65, 69, 72, 77] }, // F   (F2 | F4 A4 C5 F5)
+  { bass: 48, tones: [72, 76, 79, 84] }, // C   (C3 | C5 E5 G5 C6)
+  { bass: 43, tones: [67, 71, 74, 79] }, // G   (G2 | G4 B4 D5 G5)
+];
+
+// 16 sixteenth-steps of melody per bar (index into chord tones; -1 = rest).
+const MELODY = [0, 2, 1, 3, 2, 0, 1, 2, 3, 2, 1, 0, 2, 1, 3, -1];
+
+function buildMusicBus(audio: AudioContext): void {
+  if (musicBus || !master) return;
+  const lp = audio.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 3200;       // soften harsh square edges -> "tinny", not piercing
+  lp.Q.value = 0.3;
+  musicBus = audio.createGain();
+  musicBus.gain.value = 0.0001;
+  musicBus.connect(lp);
+  lp.connect(master);
+  if (reverb) {
+    const send = audio.createGain();
+    send.gain.value = 0.12;
+    lp.connect(send);
+    send.connect(reverb);
+  }
+}
+
+function musicNote(audio: AudioContext, freq: number, time: number, dur: number, type: OscillatorType, gain: number): void {
+  if (!musicBus) return;
+  const osc = audio.createOscillator();
+  const env = audio.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, time);
+  env.gain.setValueAtTime(0.0001, time);
+  env.gain.exponentialRampToValueAtTime(gain, time + 0.006);
+  env.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  osc.connect(env);
+  env.connect(musicBus);
+  osc.start(time);
+  osc.stop(time + dur + 0.03);
+}
+
+function scheduleStep(audio: AudioContext, index: number, time: number): void {
+  const bar = Math.floor(index / 16) % PROG.length;
+  const s = index % 16;
+  const chord = PROG[bar];
+  // Bass: a triangle root on every quarter note.
+  if (s % 4 === 0) {
+    musicNote(audio, midi(chord.bass), time, STEP * 3.5, 'triangle', 0.2);
+  }
+  // Melody: a square-wave arpeggio.
+  const mi = MELODY[s];
+  if (mi >= 0) {
+    musicNote(audio, midi(chord.tones[mi]), time, STEP * 0.9, 'square', 0.1);
+    // A soft octave-up sparkle on the upbeats for shimmer.
+    if (s % 4 === 2) {
+      musicNote(audio, midi(chord.tones[mi] + 12), time, STEP * 0.5, 'square', 0.03);
+    }
+  }
+}
+
+function scheduler(): void {
+  if (!ctx || !musicPlaying) return;
+  // Background tabs throttle setInterval, so ctx.currentTime can race far ahead.
+  // Skip the missed steps (keeping the bar position aligned) so we don't dump a
+  // burst of overlapping past-timestamped notes when the tab regains focus.
+  if (nextStepTime < ctx.currentTime) {
+    const missed = Math.ceil((ctx.currentTime - nextStepTime) / STEP);
+    stepIndex += missed;
+    nextStepTime += missed * STEP;
+  }
+  while (nextStepTime < ctx.currentTime + LOOKAHEAD) {
+    scheduleStep(ctx, stepIndex, nextStepTime);
+    nextStepTime += STEP;
+    stepIndex++;
+  }
+}
+
+export function startMusic(): void {
+  const audio = getCtx();
+  if (!audio || musicPlaying) return;
+  buildMusicBus(audio);
+  if (!musicBus) return;
+  musicPlaying = true;
+  stepIndex = 0;
+  nextStepTime = audio.currentTime + 0.1;
+  musicBus.gain.cancelScheduledValues(audio.currentTime);
+  musicBus.gain.setValueAtTime(0.0001, audio.currentTime);
+  musicBus.gain.exponentialRampToValueAtTime(MUSIC_LEVEL, audio.currentTime + 0.8);
+  musicTimer = window.setInterval(scheduler, 25);
+  scheduler();
+}
+
+export function stopMusic(): void {
+  if (!musicPlaying) return;
+  musicPlaying = false;
+  if (musicTimer != null) {
+    clearInterval(musicTimer);
+    musicTimer = null;
+  }
+  if (ctx && musicBus) {
+    const now = ctx.currentTime;
+    musicBus.gain.cancelScheduledValues(now);
+    musicBus.gain.setValueAtTime(Math.max(0.0001, musicBus.gain.value), now);
+    musicBus.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+  }
+}
+
+export function isMusicOn(): boolean {
+  return musicEnabled;
+}
+
+export function toggleMusic(): boolean {
+  musicEnabled = !musicEnabled;
+  try {
+    localStorage.setItem(MUSIC_KEY, musicEnabled ? 'true' : 'false');
+  } catch {
+    // ignore storage failures
+  }
+  if (musicEnabled) startMusic();
+  else stopMusic();
+  return musicEnabled;
+}
+
+// If music was left on in a previous session, resume on the first user gesture
+// (browsers block audio until the user interacts).
+export function initMusicAutoStart(): void {
+  if (typeof window === 'undefined' || !musicEnabled) return;
+  const handler = () => {
+    window.removeEventListener('pointerdown', handler);
+    window.removeEventListener('keydown', handler);
+    if (musicEnabled) startMusic();
+  };
+  window.addEventListener('pointerdown', handler, { once: true });
+  window.addEventListener('keydown', handler, { once: true });
+}

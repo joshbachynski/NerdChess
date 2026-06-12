@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Swords, Shuffle, Volume2, VolumeX, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
+import { RotateCcw, Swords, Shuffle, Volume2, VolumeX, Music, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { playSound, isMuted, toggleMuted } from "@/lib/sounds";
+import { playSound, isMuted, toggleMuted, isMusicOn, toggleMusic, initMusicAutoStart } from "@/lib/sounds";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import meadowTile from "@assets/generated_images/tile_meadow.png";
 import scifiTile from "@assets/generated_images/tile_scifi.png";
@@ -431,6 +431,7 @@ export default function Home() {
   const [theme, setTheme] = useState<string>(initState.theme);
   const [pieceSet, setPieceSet] = useState<string>(initState.pieceSet);
   const [muted, setMuted] = useState<boolean>(() => isMuted());
+  const [musicOn, setMusicOn] = useState<boolean>(() => isMusicOn());
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Always-fresh snapshots for use inside delayed combat callbacks
@@ -438,6 +439,7 @@ export default function Home() {
   useEffect(() => { boardRef.current = board; }, [board]);
   const numPlayersRef = useRef(numPlayers);
   useEffect(() => { numPlayersRef.current = numPlayers; }, [numPlayers]);
+  useEffect(() => { initMusicAutoStart(); }, []);
 
   const gridSize = gridForPlayers(numPlayers);
   const playersInGame = PLAYER_ORDER.slice(0, numPlayers);
@@ -779,6 +781,10 @@ export default function Home() {
     if (!nowMuted) playSound('move'); // brief cue that sound is back on
   };
 
+  const handleToggleMusic = () => {
+    setMusicOn(toggleMusic());
+  };
+
   const squareSize = boardWidth / gridSize;
 
   // Thick black outline only on edges that face a "no-go" cell (a hole or off-grid),
@@ -901,17 +907,34 @@ export default function Home() {
                 <h1 className="text-3xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">
                   Nerd Chess
                 </h1>
-                <button
-                  type="button"
-                  onClick={handleToggleMute}
-                  title={muted ? 'Unmute sound effects' : 'Mute sound effects'}
-                  aria-label={muted ? 'Unmute sound effects' : 'Mute sound effects'}
-                  aria-pressed={muted}
-                  data-testid="button-mute-toggle"
-                  className="shrink-0 mt-1 p-2 rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all"
-                >
-                  {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                </button>
+                <div className="shrink-0 mt-1 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleToggleMusic}
+                    title={musicOn ? 'Turn off background music' : 'Turn on background music'}
+                    aria-label={musicOn ? 'Turn off background music' : 'Turn on background music'}
+                    aria-pressed={musicOn}
+                    data-testid="button-music-toggle"
+                    className={`p-2 rounded-lg border transition-all ${
+                      musicOn
+                        ? 'border-white/20 bg-white/15 text-white'
+                        : 'border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <Music className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleMute}
+                    title={muted ? 'Unmute sound effects' : 'Mute sound effects'}
+                    aria-label={muted ? 'Unmute sound effects' : 'Mute sound effects'}
+                    aria-pressed={muted}
+                    data-testid="button-mute-toggle"
+                    className="p-2 rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                  >
+                    {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <p className="text-white/60 font-light text-sm">
                 Dice combat on a randomized battlefield

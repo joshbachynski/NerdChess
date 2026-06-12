@@ -1,13 +1,16 @@
 // Lightweight Web Audio sound engine for Nerd Chess.
-// Synthesizes short, distinct tones on demand — no audio assets to load.
-// Each play spins up fresh oscillator/gain nodes, so rapid repeated triggers
-// and overlapping events never cut each other off.
+// Synthesizes short, characterful battle sounds on demand — no audio assets to
+// load. Voices are layered/detuned for body, noise transients add impact, and a
+// shared convolution reverb gives everything a sense of space. Each play spins
+// up fresh nodes, so rapid repeated triggers never cut each other off.
 
 export type SoundName = 'move' | 'attack' | 'embattled' | 'death' | 'win';
 
 const MUTE_KEY = 'nerd-chess-muted';
 
 let ctx: AudioContext | null = null;
+let master: GainNode | null = null;
+let reverb: ConvolverNode | null = null;
 let muted = false;
 
 try {
@@ -16,11 +19,47 @@ try {
   // ignore storage failures
 }
 
+// A short, smooth decaying-noise impulse response for the convolution reverb.
+function makeImpulse(audio: AudioContext, duration: number, decay: number): AudioBuffer {
+  const rate = audio.sampleRate;
+  const len = Math.max(1, Math.floor(rate * duration));
+  const buf = audio.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+  }
+  return buf;
+}
+
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   const AC = window.AudioContext || (window as any).webkitAudioContext;
   if (!AC) return null;
-  if (!ctx) ctx = new AC();
+  if (!ctx) {
+    ctx = new AC();
+    // Master bus -> soft limiter -> speakers, so overlapping hits stay clean.
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -14;
+    comp.knee.value = 24;
+    comp.ratio.value = 12;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.18;
+    comp.connect(ctx.destination);
+
+    master = ctx.createGain();
+    master.gain.value = 0.9;
+    master.connect(comp);
+
+    // Parallel reverb send for spatial depth.
+    reverb = ctx.createConvolver();
+    reverb.buffer = makeImpulse(ctx, 1.1, 2.6);
+    const wetGain = ctx.createGain();
+    wetGain.gain.value = 0.55;
+    reverb.connect(wetGain);
+    wetGain.connect(comp);
+  }
   // Browsers start the context suspended until a user gesture; resume on demand.
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   return ctx;
@@ -44,42 +83,73 @@ export function toggleMuted(): boolean {
   return muted;
 }
 
-// A single tone with an attack/decay envelope.
-interface Tone {
-  freq: number;        // starting frequency (Hz)
-  endFreq?: number;    // optional glide target
-  type?: OscillatorType;
-  start: number;       // seconds, relative to play time
-  duration: number;    // seconds
-  gain?: number;       // peak gain (0-1)
+// Route a finished voice to the dry master bus and, optionally, the reverb send.
+function connectOut(audio: AudioContext, node: AudioNode, wet: number): void {
+  if (master) node.connect(master);
+  if (wet > 0 && reverb) {
+    const send = audio.createGain();
+    send.gain.value = wet;
+    node.connect(send);
+    send.connect(reverb);
+  }
 }
 
-function playTone(audio: AudioContext, t: Tone): void {
-  const osc = audio.createOscillator();
-  const env = audio.createGain();
-  const now = audio.currentTime + t.start;
+interface Tone {
+  freq: number;          // starting frequency (Hz)
+  endFreq?: number;      // optional glide target
+  type?: OscillatorType;
+  start?: number;        // seconds, relative to play time
+  duration: number;      // seconds
+  gain?: number;         // peak gain (0-1)
+  attack?: number;       // attack time (s)
+  voices?: number;       // stacked detuned oscillators for thickness
+  detune?: number;       // total detune spread across voices (cents)
+  wet?: number;          // reverb send amount (0-1)
+}
+
+function tone(audio: AudioContext, t: Tone): void {
+  const now = audio.currentTime + (t.start ?? 0);
   const peak = t.gain ?? 0.2;
+  const attack = t.attack ?? 0.008;
+  const voices = t.voices ?? 1;
 
-  osc.type = t.type ?? 'sine';
-  osc.frequency.setValueAtTime(t.freq, now);
-  if (t.endFreq != null) {
-    osc.frequency.exponentialRampToValueAtTime(Math.max(1, t.endFreq), now + t.duration);
-  }
-
+  const env = audio.createGain();
   env.gain.setValueAtTime(0.0001, now);
-  env.gain.exponentialRampToValueAtTime(peak, now + 0.01);
+  env.gain.exponentialRampToValueAtTime(peak, now + attack);
   env.gain.exponentialRampToValueAtTime(0.0001, now + t.duration);
 
-  osc.connect(env);
-  env.connect(audio.destination);
-  osc.start(now);
-  osc.stop(now + t.duration + 0.02);
+  for (let v = 0; v < voices; v++) {
+    const osc = audio.createOscillator();
+    osc.type = t.type ?? 'sine';
+    osc.frequency.setValueAtTime(t.freq, now);
+    if (t.endFreq != null) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1, t.endFreq), now + t.duration);
+    }
+    if (voices > 1 && t.detune) {
+      osc.detune.setValueAtTime((v - (voices - 1) / 2) * (t.detune / Math.max(1, voices - 1)), now);
+    }
+    osc.connect(env);
+    osc.start(now);
+    osc.stop(now + t.duration + 0.05);
+  }
+
+  connectOut(audio, env, t.wet ?? 0);
 }
 
-// A short burst of filtered noise — used for the "attack" swing.
-function playNoise(audio: AudioContext, start: number, duration: number, gain: number): void {
-  const now = audio.currentTime + start;
-  const frames = Math.floor(audio.sampleRate * duration);
+interface Noise {
+  start?: number;
+  duration: number;
+  gain?: number;
+  filter?: BiquadFilterType;
+  f0?: number;           // filter freq start
+  f1?: number;           // filter freq end (sweep)
+  q?: number;
+  wet?: number;
+}
+
+function noise(audio: AudioContext, n: Noise): void {
+  const now = audio.currentTime + (n.start ?? 0);
+  const frames = Math.max(1, Math.floor(audio.sampleRate * n.duration));
   const buffer = audio.createBuffer(1, frames, audio.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
@@ -88,49 +158,61 @@ function playNoise(audio: AudioContext, start: number, duration: number, gain: n
   src.buffer = buffer;
 
   const filter = audio.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.setValueAtTime(1800, now);
-  filter.frequency.exponentialRampToValueAtTime(600, now + duration);
-  filter.Q.value = 0.8;
+  filter.type = n.filter ?? 'bandpass';
+  const f0 = n.f0 ?? 1800;
+  const f1 = n.f1 ?? f0;
+  filter.frequency.setValueAtTime(f0, now);
+  if (f1 !== f0) filter.frequency.exponentialRampToValueAtTime(Math.max(1, f1), now + n.duration);
+  filter.Q.value = n.q ?? 0.8;
 
   const env = audio.createGain();
+  const peak = n.gain ?? 0.2;
   env.gain.setValueAtTime(0.0001, now);
-  env.gain.exponentialRampToValueAtTime(gain, now + 0.008);
-  env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  env.gain.exponentialRampToValueAtTime(peak, now + 0.006);
+  env.gain.exponentialRampToValueAtTime(0.0001, now + n.duration);
 
   src.connect(filter);
   filter.connect(env);
-  env.connect(audio.destination);
+  connectOut(audio, env, n.wet ?? 0);
   src.start(now);
-  src.stop(now + duration + 0.02);
+  src.stop(now + n.duration + 0.05);
 }
 
 const RECIPES: Record<SoundName, (audio: AudioContext) => void> = {
-  // Soft, quick wooden blip — a piece settling onto a square.
+  // Piece settling onto a square: a soft woody "tock" with a faint tap transient.
   move: (audio) => {
-    playTone(audio, { freq: 440, endFreq: 660, type: 'triangle', start: 0, duration: 0.12, gain: 0.18 });
+    tone(audio, { freq: 210, endFreq: 125, type: 'triangle', duration: 0.13, gain: 0.16, attack: 0.004 });
+    noise(audio, { duration: 0.035, gain: 0.07, filter: 'lowpass', f0: 2600, f1: 800, q: 0.5 });
   },
-  // Metallic swing: noise sweep plus a sharp ring.
+  // Steel-on-steel clash: a swipe of bright noise plus an inharmonic ringing edge.
   attack: (audio) => {
-    playNoise(audio, 0, 0.18, 0.22);
-    playTone(audio, { freq: 880, endFreq: 320, type: 'sawtooth', start: 0, duration: 0.2, gain: 0.16 });
+    noise(audio, { duration: 0.12, gain: 0.16, filter: 'bandpass', f0: 3600, f1: 1200, q: 0.7, wet: 0.18 });
+    tone(audio, { freq: 1760, endFreq: 760, type: 'sawtooth', duration: 0.2, gain: 0.1, voices: 2, detune: 22, wet: 0.28 });
+    tone(audio, { freq: 2640, type: 'square', duration: 0.09, gain: 0.045, wet: 0.28 });
   },
-  // Tense, unresolved two-note clash — neither side breaks through.
+  // Locked standoff: two detuned low voices beat against each other over a rumble — unresolved.
   embattled: (audio) => {
-    playTone(audio, { freq: 330, type: 'square', start: 0, duration: 0.16, gain: 0.13 });
-    playTone(audio, { freq: 349, type: 'square', start: 0.04, duration: 0.22, gain: 0.13 });
+    tone(audio, { freq: 155, type: 'sawtooth', duration: 0.5, gain: 0.1, voices: 2, detune: 10, wet: 0.22 });
+    tone(audio, { freq: 164, type: 'square', start: 0.02, duration: 0.46, gain: 0.06, wet: 0.22 });
+    noise(audio, { duration: 0.5, gain: 0.04, filter: 'lowpass', f0: 320, f1: 130, q: 0.4 });
   },
-  // Descending, hollow fall — a piece is destroyed.
+  // A piece destroyed: a punchy low thud, a descending wail, and a crunchy impact.
   death: (audio) => {
-    playTone(audio, { freq: 400, endFreq: 90, type: 'sawtooth', start: 0, duration: 0.4, gain: 0.22 });
-    playTone(audio, { freq: 200, endFreq: 60, type: 'sine', start: 0.02, duration: 0.45, gain: 0.18 });
+    tone(audio, { freq: 220, endFreq: 42, type: 'sine', duration: 0.5, gain: 0.26, attack: 0.003, wet: 0.22 });
+    tone(audio, { freq: 330, endFreq: 70, type: 'sawtooth', start: 0.01, duration: 0.4, gain: 0.12, wet: 0.22 });
+    noise(audio, { duration: 0.16, gain: 0.14, filter: 'lowpass', f0: 1400, f1: 200, q: 0.6, wet: 0.22 });
   },
-  // Bright rising arpeggio — victory.
+  // Victory: a rising major arpeggio resolving into a sustained chord with a bell shimmer.
   win: (audio) => {
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
-    notes.forEach((freq, i) => {
-      playTone(audio, { freq, type: 'triangle', start: i * 0.12, duration: 0.28, gain: 0.2 });
+    const arp = [392.0, 523.25, 659.25, 783.99]; // G4 C5 E5 G5
+    arp.forEach((freq, i) => {
+      tone(audio, { freq, type: 'triangle', start: i * 0.1, duration: 0.3, gain: 0.16, voices: 2, detune: 7, wet: 0.3 });
     });
+    const chord = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+    chord.forEach((freq) => {
+      tone(audio, { freq, type: 'triangle', start: 0.42, duration: 0.7, gain: 0.11, voices: 2, detune: 6, wet: 0.4 });
+    });
+    tone(audio, { freq: 2093, type: 'sine', start: 0.42, duration: 0.8, gain: 0.05, wet: 0.5 });
   },
 };
 

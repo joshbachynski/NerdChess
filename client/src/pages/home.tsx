@@ -11,61 +11,96 @@ import cavernTile from "@assets/generated_images/tile_cavern.png";
 import dungeonTile from "@assets/generated_images/tile_dungeon.png";
 import volcanoTile from "@assets/generated_images/tile_volcano.png";
 import voidTile from "@assets/generated_images/tile_void.png";
-import type { CSSProperties } from "react";
 
-type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P' | 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
+type PieceKind = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P';
+type PlayerColor = 'white' | 'black' | 'red' | 'blue';
+// A piece on the board is encoded as "{colorCode}{kind}", e.g. 'wK' (white king), 'uQ' (blue queen).
+type PieceType = string;
 type Square = string; // "row,col"
+
+interface Faction {
+  color: PlayerColor;
+  code: string;        // single char used in the piece encoding (w/b/r/u)
+  label: string;
+  finish: 'light' | 'dark'; // which sprite finish the art is based on
+  tint?: string;       // optional CSS filter that colorizes the base sprite (red/blue)
+  ring: string;        // solid faction color (markers, borders)
+  glow: string;        // translucent faction color (piece backplate glow)
+}
+
+const FACTIONS: Record<PlayerColor, Faction> = {
+  white: { color: 'white', code: 'w', label: 'White', finish: 'light', ring: '#f8fafc', glow: 'rgba(248,250,252,0.55)' },
+  black: { color: 'black', code: 'b', label: 'Black', finish: 'dark', ring: '#0f172a', glow: 'rgba(2,6,23,0.6)' },
+  red:   { color: 'red',   code: 'r', label: 'Red',   finish: 'light', tint: 'sepia(1) saturate(7) hue-rotate(-50deg) brightness(0.92)', ring: '#ef4444', glow: 'rgba(239,68,68,0.6)' },
+  blue:  { color: 'blue',  code: 'u', label: 'Blue',  finish: 'light', tint: 'sepia(1) saturate(6) hue-rotate(185deg) brightness(1)', ring: '#3b82f6', glow: 'rgba(59,130,246,0.62)' },
+};
+
+const PLAYER_ORDER: PlayerColor[] = ['white', 'black', 'red', 'blue'];
+const CODE_TO_COLOR: Record<string, PlayerColor> = { w: 'white', b: 'black', r: 'red', u: 'blue' };
+
+const pieceColor = (p: PieceType): PlayerColor => CODE_TO_COLOR[p[0]] || 'white';
+const pieceKind = (p: PieceType): PieceKind => p[1] as PieceKind;
+const makePiece = (color: PlayerColor, kind: PieceKind): PieceType => `${FACTIONS[color].code}${kind}`;
+
+const gridForPlayers = (n: number): number => (n >= 4 ? 16 : n >= 3 ? 14 : 12);
+
+// Which factions still have a King on the board (i.e. are not eliminated).
+function colorsWithKing(b: BoardState): Set<PlayerColor> {
+  const s = new Set<PlayerColor>();
+  for (const pieces of Object.values(b)) {
+    for (const p of pieces) if (pieceKind(p) === 'K') s.add(pieceColor(p));
+  }
+  return s;
+}
+
+// The next player to act after `from`, skipping eliminated factions (no King left).
+function nextActiveColor(from: PlayerColor, b: BoardState, numPlayers: number): PlayerColor {
+  const alive = colorsWithKing(b);
+  const order = PLAYER_ORDER.slice(0, numPlayers);
+  const idx = order.indexOf(from);
+  for (let i = 1; i <= order.length; i++) {
+    const cand = order[(idx + i) % order.length];
+    if (alive.has(cand)) return cand;
+  }
+  return from;
+}
 
 interface Theme {
   id: string;
   label: string;
   tile: string;         // seamless top-down material texture that paints the board
   pageGlow: string;     // accent color for the dark page vignette
-  obstacles: boolean;   // carve themed impassable hazard cells
-  obstacleStyle: CSSProperties; // how a hazard cell looks
   holeIntensity: number; // 0-1: how often this map type has interior holes/corridors, and how many
 }
 
 const THEMES: Theme[] = [
   {
     id: 'meadow', label: 'Fantasy Meadow', tile: meadowTile,
-    pageGlow: 'rgba(54, 96, 54, 0.55)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.45,
+    pageGlow: 'rgba(54, 96, 54, 0.55)', holeIntensity: 0.45,
   },
   {
     id: 'scifi', label: 'Sci-Fi Station', tile: scifiTile,
-    pageGlow: 'rgba(28, 86, 128, 0.55)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.9,
+    pageGlow: 'rgba(28, 86, 128, 0.55)', holeIntensity: 0.9,
   },
   {
     id: 'city', label: 'Night City', tile: cityTile,
-    pageGlow: 'rgba(56, 66, 108, 0.5)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.8,
+    pageGlow: 'rgba(56, 66, 108, 0.5)', holeIntensity: 0.8,
   },
   {
     id: 'cavern', label: 'Crystal Cavern', tile: cavernTile,
-    pageGlow: 'rgba(36, 88, 128, 0.55)', obstacles: true, holeIntensity: 0.85,
-    obstacleStyle: {
-      background: 'radial-gradient(circle at 50% 45%, rgba(60, 150, 190, 0.85), rgba(8, 26, 44, 0.96))',
-      boxShadow: 'inset 0 0 14px rgba(60, 170, 200, 0.6)',
-    },
+    pageGlow: 'rgba(36, 88, 128, 0.55)', holeIntensity: 0.85,
   },
   {
     id: 'dungeon', label: 'Dungeon', tile: dungeonTile,
-    pageGlow: 'rgba(78, 68, 48, 0.5)', obstacles: true, holeIntensity: 0.9,
-    obstacleStyle: {
-      background: 'radial-gradient(circle at 50% 45%, rgba(12, 12, 16, 0.95), rgba(0, 0, 0, 0.98))',
-      boxShadow: 'inset 0 0 16px rgba(0, 0, 0, 0.95)',
-    },
+    pageGlow: 'rgba(78, 68, 48, 0.5)', holeIntensity: 0.9,
   },
   {
     id: 'volcano', label: 'Volcano', tile: volcanoTile,
-    pageGlow: 'rgba(140, 56, 18, 0.55)', obstacles: true, holeIntensity: 0.75,
-    obstacleStyle: {
-      background: 'radial-gradient(circle at 50% 45%, rgba(255, 150, 40, 0.95), rgba(150, 30, 10, 0.96))',
-      boxShadow: 'inset 0 0 16px rgba(255, 90, 0, 0.9)',
-    },
+    pageGlow: 'rgba(140, 56, 18, 0.55)', holeIntensity: 0.75,
   },
   {
     id: 'void', label: 'Deep Void', tile: voidTile,
-    pageGlow: 'rgba(78, 48, 118, 0.55)', obstacles: false, obstacleStyle: {}, holeIntensity: 0.7,
+    pageGlow: 'rgba(78, 48, 118, 0.55)', holeIntensity: 0.7,
   },
 ];
 
@@ -90,38 +125,23 @@ interface CombatResult {
   to: Square;
 }
 
-const PIECE_STATS: { [key: string]: { attack: number; defense: number; name: string } } = {
+const PIECE_STATS: { [key in PieceKind]: { attack: number; defense: number; name: string } } = {
   'P': { attack: 1, defense: 2, name: 'Pawn' },
-  'p': { attack: 1, defense: 2, name: 'Pawn' },
   'R': { attack: 1, defense: 5, name: 'Rook' },
-  'r': { attack: 1, defense: 5, name: 'Rook' },
   'N': { attack: 4, defense: 2, name: 'Knight' },
-  'n': { attack: 4, defense: 2, name: 'Knight' },
   'B': { attack: 3, defense: 3, name: 'Bishop' },
-  'b': { attack: 3, defense: 3, name: 'Bishop' },
   'Q': { attack: 5, defense: 4, name: 'Queen' },
-  'q': { attack: 5, defense: 4, name: 'Queen' },
   'K': { attack: 6, defense: 2, name: 'King' },
-  'k': { attack: 6, defense: 2, name: 'King' },
 };
 
-const PIECE_UNICODE: { [key in PieceType]: string } = {
-  'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
-  'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟',
-};
-
-const GRID_SIZE = 12;
-
-const BLACK_BACK: PieceType[] = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
-const WHITE_BACK: PieceType[] = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
+// Back-rank layout shared by every army (mirrored per edge during placement).
+const BACK_RANK: PieceKind[] = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
 
 const DiceIcon = ({ value }: { value: number }) => {
   const icons = [Dice1, Dice2, Dice3, Dice4, Dice5, Dice6];
   const Icon = icons[value - 1] || Dice1;
   return <Icon className="w-12 h-12" />;
 };
-
-const isWhitePiece = (piece: PieceType) => piece === piece.toUpperCase();
 
 // Themed piece art — each style ships a light army (white) and a dark army (black),
 // generated as transparent sprites. Loaded eagerly so urls are available synchronously.
@@ -145,33 +165,31 @@ const PIECE_SETS: PieceSet[] = [
 ];
 const DEFAULT_SET = 'classic';
 
-const PIECE_TYPE_NAME: { [key in PieceType]: string } = {
+const PIECE_KIND_NAME: { [key in PieceKind]: string } = {
   'K': 'king', 'Q': 'queen', 'R': 'rook', 'B': 'bishop', 'N': 'knight', 'P': 'pawn',
-  'k': 'king', 'q': 'queen', 'r': 'rook', 'b': 'bishop', 'n': 'knight', 'p': 'pawn',
 };
-// White pieces wear the "light" finish, black pieces the "dark" finish.
+// Each faction bases its art on a light or dark finish; red/blue add a CSS tint at render time.
 const pieceImage = (setId: string, piece: PieceType): string =>
-  pieceUrl(`piece_${setId}_${isWhitePiece(piece) ? 'light' : 'dark'}_${PIECE_TYPE_NAME[piece]}.png`);
+  pieceUrl(`piece_${setId}_${FACTIONS[pieceColor(piece)].finish}_${PIECE_KIND_NAME[pieceKind(piece)]}.png`);
 
 // Grow a random connected blob of squares
-function generateShape(): string[] {
+function generateShape(gridSize: number, target: number): string[] {
   const active = new Set<string>();
-  const startR = Math.floor(GRID_SIZE / 2);
-  const startC = Math.floor(GRID_SIZE / 2);
+  const startR = Math.floor(gridSize / 2);
+  const startC = Math.floor(gridSize / 2);
   active.add(`${startR},${startC}`);
 
-  const target = 72 + Math.floor(Math.random() * 21); // 72-92 cells (solid organic blob)
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   let guard = 0;
 
-  while (active.size < target && guard < 8000) {
+  while (active.size < target && guard < 20000) {
     guard++;
     const cells = Array.from(active);
     const [r, c] = cells[Math.floor(Math.random() * cells.length)].split(',').map(Number);
     const [dr, dc] = dirs[Math.floor(Math.random() * 4)];
     const nr = r + dr;
     const nc = c + dc;
-    if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
+    if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize) {
       active.add(`${nr},${nc}`);
     }
   }
@@ -179,91 +197,56 @@ function generateShape(): string[] {
   return Array.from(active);
 }
 
-function cellNeighbors(cell: string): string[] {
+function cellNeighbors(cell: string, gridSize: number): string[] {
   const [r, c] = cell.split(',').map(Number);
   return [[r + 1, c], [r - 1, c], [r, c + 1], [r, c - 1]]
-    .filter(([nr, nc]) => nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE)
+    .filter(([nr, nc]) => nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize)
     .map(([nr, nc]) => `${nr},${nc}`);
 }
 
 // Is every active cell reachable from every other (4-connectivity)?
-function isConnected(activeArr: string[]): boolean {
+function isConnected(activeArr: string[], gridSize: number): boolean {
   if (activeArr.length === 0) return true;
   const set = new Set(activeArr);
   const seen = new Set<string>([activeArr[0]]);
   const stack = [activeArr[0]];
   while (stack.length) {
     const cur = stack.pop()!;
-    for (const n of cellNeighbors(cur)) {
+    for (const n of cellNeighbors(cur, gridSize)) {
       if (set.has(n) && !seen.has(n)) { seen.add(n); stack.push(n); }
     }
   }
   return seen.size === set.size;
 }
 
-// Carve a few impassable interior clusters (lava pits / chasms) while keeping
-// the playable area connected and the army rows intact.
-function carveObstacles(sortedCells: string[]): { active: string[]; blocked: string[] } {
-  const protectCount = 18; // keep top & bottom army cells (16 each) + buffer
-  const protectedSet = new Set([
-    ...sortedCells.slice(0, protectCount),
-    ...sortedCells.slice(-protectCount),
-  ]);
-  const candidates = sortedCells.filter(c => !protectedSet.has(c));
-  if (candidates.length < 6) return { active: sortedCells, blocked: [] };
-
-  const active = new Set(sortedCells);
-  const blocked = new Set<string>();
-  const numClusters = 2 + Math.floor(Math.random() * 3); // 2-4 clusters
-
-  for (let k = 0; k < numClusters; k++) {
-    const avail = candidates.filter(c => active.has(c) && !blocked.has(c));
-    if (!avail.length) break;
-    const seed = avail[Math.floor(Math.random() * avail.length)];
-    const clusterSize = 1 + Math.floor(Math.random() * 3); // 1-3 cells
-    const cluster: string[] = [seed];
-    const frontier = [seed];
-    while (cluster.length < clusterSize) {
-      const from = frontier[Math.floor(Math.random() * frontier.length)];
-      const opts = cellNeighbors(from).filter(
-        n => active.has(n) && !blocked.has(n) && !protectedSet.has(n) && !cluster.includes(n)
-      );
-      if (!opts.length) break;
-      const pick = opts[Math.floor(Math.random() * opts.length)];
-      cluster.push(pick);
-      frontier.push(pick);
-    }
-    const trial = new Set(active);
-    cluster.forEach(c => trial.delete(c));
-    if (isConnected(Array.from(trial))) {
-      cluster.forEach(c => { active.delete(c); blocked.add(c); });
-    }
-  }
-
-  return { active: Array.from(active), blocked: Array.from(blocked) };
-}
-
 // Punch interior holes & corridors into the board. A "hole" is simply a missing tile
 // (an empty gap with edges) inside the grouping — NOT a special square. `intensity` (0-1)
 // controls both how likely a board is to have any holes and how many/how long they are.
-function punchHoles(sortedCells: string[], intensity: number): string[] {
+function punchHoles(sortedCells: string[], intensity: number, gridSize: number, minCells: number): string[] {
   if (intensity <= 0) return sortedCells;
   // High-intensity map types almost always have holes/corridors; low ones are often solid.
   if (Math.random() > intensity) return sortedCells;
 
-  const protectCount = 18; // shield the army rows top & bottom
+  // Shield every army staging zone: top/bottom (row-sorted) and left/right (col-sorted).
+  const byCol = [...sortedCells].sort((a, b) => {
+    const [ra, ca] = a.split(',').map(Number);
+    const [rb, cb] = b.split(',').map(Number);
+    return ca - cb || ra - rb;
+  });
+  const protectCount = 18;
   const protectedSet = new Set([
     ...sortedCells.slice(0, protectCount),
     ...sortedCells.slice(-protectCount),
+    ...byCol.slice(0, protectCount),
+    ...byCol.slice(-protectCount),
   ]);
   const active = new Set(sortedCells);
-  const minCells = 40;
   const numHoles = 1 + Math.floor(Math.random() * (2 + Math.round(intensity * 4))); // ~1-6 by intensity
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
   const interiorCandidates = () =>
     Array.from(active).filter(
-      c => !protectedSet.has(c) && cellNeighbors(c).filter(n => active.has(n)).length >= 3
+      c => !protectedSet.has(c) && cellNeighbors(c, gridSize).filter(n => active.has(n)).length >= 3
     );
 
   for (let k = 0; k < numHoles; k++) {
@@ -292,7 +275,7 @@ function punchHoles(sortedCells: string[], intensity: number): string[] {
       const frontier = [seed];
       while (hole.length < holeSize) {
         const from = frontier[Math.floor(Math.random() * frontier.length)];
-        const opts = cellNeighbors(from).filter(
+        const opts = cellNeighbors(from, gridSize).filter(
           n => active.has(n) && !protectedSet.has(n) && !hole.includes(n)
         );
         if (!opts.length) break;
@@ -305,7 +288,7 @@ function punchHoles(sortedCells: string[], intensity: number): string[] {
     if (active.size - hole.length >= minCells) {
       hole.forEach(c => active.delete(c));
       // Keep the board as a single connected piece: undo this hole if it split the board.
-      if (!isConnected(Array.from(active))) {
+      if (!isConnected(Array.from(active), gridSize)) {
         hole.forEach(c => active.add(c));
       }
     }
@@ -314,67 +297,112 @@ function punchHoles(sortedCells: string[], intensity: number): string[] {
   return Array.from(active);
 }
 
-// Generate a random board shape with armies placed on it
-function generateBoard(holeIntensity: number): { active: string[]; board: BoardState; blocked: string[] } {
-  const sortFn = (a: string, b: string) => {
+// Place a 16-piece army (back rank then pawns) on the given run of cells.
+function placeArmy(board: BoardState, cells16: string[], color: PlayerColor) {
+  cells16.forEach((cell, i) => {
+    const kind: PieceKind = i < 8 ? BACK_RANK[i] : 'P';
+    board[cell] = [makePiece(color, kind)];
+  });
+}
+
+// Generate a random board shape sized for the player count, with each army on a distinct edge.
+function generateBoard(holeIntensity: number, numPlayers: number): { active: string[]; board: BoardState; blocked: string[] } {
+  const gridSize = gridForPlayers(numPlayers);
+  const byRowCol = (a: string, b: string) => {
     const [ra, ca] = a.split(',').map(Number);
     const [rb, cb] = b.split(',').map(Number);
     return ra - rb || ca - cb;
   };
+  const byColRow = (a: string, b: string) => {
+    const [ra, ca] = a.split(',').map(Number);
+    const [rb, cb] = b.split(',').map(Number);
+    return ca - cb || ra - rb;
+  };
 
-  let cells = generateShape();
-  cells.sort(sortFn);
+  // Each extra player beyond two grows the board by 50% squares.
+  const factor = 1 + 0.5 * (numPlayers - 2);
+  const base = 72 + Math.floor(Math.random() * 21);
+  const target = Math.min(Math.round(base * factor), gridSize * gridSize - 4);
+  const minCells = numPlayers * 16 + 24;
 
+  let cells = generateShape(gridSize, target);
+  cells.sort(byRowCol);
   // Holes & corridors (empty interior gaps, never special tiles) at a theme-appropriate rate.
-  cells = punchHoles(cells, holeIntensity);
-  cells.sort(sortFn);
-
-  const blocked: string[] = [];
+  cells = punchHoles(cells, holeIntensity, gridSize, minCells);
+  cells.sort(byRowCol);
 
   const board: BoardState = {};
+  const used = new Set<string>();
+  const take = (sorted: string[]): string[] => {
+    const picked: string[] = [];
+    for (const c of sorted) {
+      if (used.has(c)) continue;
+      picked.push(c);
+      used.add(c);
+      if (picked.length === 16) break;
+    }
+    return picked;
+  };
 
-  // Black army occupies the topmost squares
-  const blackCells = cells.slice(0, 16);
-  blackCells.slice(0, 8).forEach((cell, i) => { board[cell] = [BLACK_BACK[i]]; });
-  blackCells.slice(8, 16).forEach((cell) => { board[cell] = ['p']; });
+  const byRow = cells;                      // top -> bottom
+  const byRowDesc = [...cells].reverse();   // bottom -> top
+  const byCol = [...cells].sort(byColRow);  // left -> right
+  const byColDesc = [...byCol].reverse();   // right -> left
 
-  // White army occupies the bottommost squares
-  const whitePawnCells = cells.slice(-16, -8);
-  const whiteBackCells = cells.slice(-8);
-  whitePawnCells.forEach((cell) => { board[cell] = ['P']; });
-  whiteBackCells.forEach((cell, i) => { board[cell] = [WHITE_BACK[i]]; });
+  // black=top, white=bottom, red=left, blue=right (each army's back rank hugs its edge).
+  placeArmy(board, take(byRow), 'black');
+  placeArmy(board, take(byRowDesc), 'white');
+  if (numPlayers >= 3) placeArmy(board, take(byCol), 'red');
+  if (numPlayers >= 4) placeArmy(board, take(byColDesc), 'blue');
 
-  return { active: cells, board, blocked };
+  return { active: cells, board, blocked: [] };
 }
 
-const STORAGE_KEY = 'nerd-chess-state';
+// v2: pieces are now 2-char "{code}{kind}" and games can have 2-4 players.
+// Old v1 saves (single-char pieces) are simply ignored — no migration.
+const STORAGE_KEY = 'nerd-chess-state-v2';
+const PIECE_RE = /^[wbru][KQRBNP]$/;
 
-function loadSavedState(): { active: string[]; board: BoardState; currentTurn: 'white' | 'black'; winner: 'white' | 'black' | null; embattled: string[]; blocked: string[]; theme: string; pieceSet: string } | null {
+interface SavedState {
+  active: string[];
+  board: BoardState;
+  currentTurn: PlayerColor;
+  winner: PlayerColor | null;
+  embattled: string[];
+  blocked: string[];
+  numPlayers: number;
+  theme: string;
+  pieceSet: string;
+}
+
+function loadSavedState(): SavedState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.active) && parsed.board && typeof parsed.board === 'object') {
-      const activeArr: string[] = parsed.active;
-      const activeSet = new Set(activeArr);
-      // Special hazard tiles are retired — drop any legacy `blocked` cells from old saves
-      // so the board is only tiles + empty holes (no special squares).
-      const blocked: string[] = [];
-      const board: BoardState = {};
-      for (const [sq, pieces] of Object.entries(parsed.board as BoardState)) {
-        if (activeSet.has(sq)) board[sq] = pieces;
+    if (!Array.isArray(parsed.active) || !parsed.board || typeof parsed.board !== 'object') return null;
+    const activeSet = new Set<string>(parsed.active);
+    const numPlayers: number = [2, 3, 4].includes(parsed.numPlayers) ? parsed.numPlayers : 2;
+    const validColors = PLAYER_ORDER.slice(0, numPlayers);
+    const isColor = (x: unknown): x is PlayerColor => validColors.includes(x as PlayerColor);
+
+    const board: BoardState = {};
+    for (const [sq, pieces] of Object.entries(parsed.board as BoardState)) {
+      if (activeSet.has(sq) && Array.isArray(pieces) && pieces.every(p => typeof p === 'string' && PIECE_RE.test(p))) {
+        board[sq] = pieces;
       }
-      return {
-        active: activeArr,
-        board,
-        currentTurn: parsed.currentTurn === 'black' ? 'black' : 'white',
-        winner: parsed.winner === 'white' || parsed.winner === 'black' ? parsed.winner : null,
-        embattled: (Array.isArray(parsed.embattled) ? parsed.embattled : []).filter((c: string) => activeSet.has(c)),
-        blocked,
-        theme: THEMES.some(t => t.id === parsed.theme) ? parsed.theme : DEFAULT_THEME,
-        pieceSet: PIECE_SETS.some(s => s.id === parsed.pieceSet) ? parsed.pieceSet : DEFAULT_SET,
-      };
     }
+    return {
+      active: parsed.active,
+      board,
+      currentTurn: isColor(parsed.currentTurn) ? parsed.currentTurn : 'white',
+      winner: isColor(parsed.winner) ? parsed.winner : null,
+      embattled: (Array.isArray(parsed.embattled) ? parsed.embattled : []).filter((c: string) => activeSet.has(c)),
+      blocked: [],
+      numPlayers,
+      theme: THEMES.some(t => t.id === parsed.theme) ? parsed.theme : DEFAULT_THEME,
+      pieceSet: PIECE_SETS.some(s => s.id === parsed.pieceSet) ? parsed.pieceSet : DEFAULT_SET,
+    };
   } catch {
     // ignore corrupted state
   }
@@ -382,44 +410,48 @@ function loadSavedState(): { active: string[]; board: BoardState; currentTurn: '
 }
 
 export default function Home() {
-  const [initState] = useState(() => {
+  const [initState] = useState<SavedState>(() => {
     const saved = loadSavedState();
     if (saved) return saved;
     const t = THEMES.find(x => x.id === DEFAULT_THEME) || THEMES[0];
-    const g = generateBoard(t.holeIntensity);
-    return { active: g.active, board: g.board, currentTurn: 'white' as const, winner: null, embattled: [] as string[], blocked: g.blocked, theme: DEFAULT_THEME, pieceSet: DEFAULT_SET };
+    const g = generateBoard(t.holeIntensity, 2);
+    return { active: g.active, board: g.board, currentTurn: 'white', winner: null, embattled: [], blocked: [], numPlayers: 2, theme: DEFAULT_THEME, pieceSet: DEFAULT_SET };
   });
   const [activeSquares, setActiveSquares] = useState<string[]>(initState.active);
   const [board, setBoard] = useState<BoardState>(initState.board);
   const [draggedPiece, setDraggedPiece] = useState<{ piece: PieceType; from: Square } | null>(null);
-  const [currentTurn, setCurrentTurn] = useState<'white' | 'black'>(initState.currentTurn);
+  const [currentTurn, setCurrentTurn] = useState<PlayerColor>(initState.currentTurn);
   const [boardWidth, setBoardWidth] = useState(500);
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [winner, setWinner] = useState<'white' | 'black' | null>(initState.winner);
+  const [winner, setWinner] = useState<PlayerColor | null>(initState.winner);
   const [embattled, setEmbattled] = useState<string[]>(initState.embattled);
-  const [blocked, setBlocked] = useState<string[]>(initState.blocked);
+  const [numPlayers, setNumPlayers] = useState<number>(initState.numPlayers);
   const [theme, setTheme] = useState<string>(initState.theme);
   const [pieceSet, setPieceSet] = useState<string>(initState.pieceSet);
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Always-fresh snapshot of the board for use inside delayed combat callbacks
+  // Always-fresh snapshots for use inside delayed combat callbacks
   const boardRef = useRef(board);
   useEffect(() => { boardRef.current = board; }, [board]);
+  const numPlayersRef = useRef(numPlayers);
+  useEffect(() => { numPlayersRef.current = numPlayers; }, [numPlayers]);
 
+  const gridSize = gridForPlayers(numPlayers);
+  const playersInGame = PLAYER_ORDER.slice(0, numPlayers);
+  const aliveColors = colorsWithKing(board);
   const activeSet = new Set(activeSquares);
   const embattledSet = new Set(embattled);
-  const blockedSet = new Set(blocked);
   const currentTheme = THEMES.find(t => t.id === theme) || THEMES[0];
 
   // Persist game state so a page reload / hot-reload never loses the game
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled, blocked, theme, pieceSet }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: activeSquares, board, currentTurn, winner, embattled, blocked: [], numPlayers, theme, pieceSet }));
     } catch {
       // ignore storage failures
     }
-  }, [activeSquares, board, currentTurn, winner, embattled, blocked, theme, pieceSet]);
+  }, [activeSquares, board, currentTurn, winner, embattled, numPlayers, theme, pieceSet]);
 
   useEffect(() => {
     return () => {
@@ -452,8 +484,8 @@ export default function Home() {
   const rollD6 = () => Math.floor(Math.random() * 6) + 1;
 
   const resolveCombat = (attacker: PieceType, defender: PieceType, from: Square, to: Square): CombatResult => {
-    const attackerStats = PIECE_STATS[attacker];
-    const defenderStats = PIECE_STATS[defender];
+    const attackerStats = PIECE_STATS[pieceKind(attacker)];
+    const defenderStats = PIECE_STATS[pieceKind(defender)];
 
     const attackRoll = rollD6();
     const defenseRoll = rollD6();
@@ -528,23 +560,30 @@ export default function Home() {
 
     setBoard(newBoard);
 
-    // Maintain the set of squares currently locked in battle
+    const attackerColor = pieceColor(result.attacker);
+
+    // A square stays embattled while two or more factions still occupy it.
     if (result.outcome === 'embattled') {
       setEmbattled(prev => prev.includes(result.to) ? prev : [...prev, result.to]);
     } else {
       const remaining = newBoard[result.to] || [];
-      const hasWhite = remaining.some(isWhitePiece);
-      const hasBlack = remaining.some(p => !isWhitePiece(p));
-      if (!(hasWhite && hasBlack)) {
+      const factionsHere = new Set(remaining.map(pieceColor));
+      if (factionsHere.size < 2) {
         setEmbattled(prev => prev.filter(s => s !== result.to));
       }
     }
 
-    // Turn follows whoever just acted: after a white attacker it's black's turn, and vice versa.
-    setCurrentTurn(isWhitePiece(result.attacker) ? 'black' : 'white');
+    // Decide victory & next turn from the post-combat board.
+    const alive = colorsWithKing(newBoard);
+    if (alive.size <= 1) {
+      // Last faction with a King standing wins (fallback to the attacker if a tie somehow occurs).
+      setWinner(alive.size === 1 ? Array.from(alive)[0] : attackerColor);
+    } else {
+      setCurrentTurn(nextActiveColor(attackerColor, newBoard, numPlayersRef.current));
+    }
 
-    const attackerName = PIECE_STATS[result.attacker].name;
-    const defenderName = PIECE_STATS[result.defender].name;
+    const attackerName = PIECE_STATS[pieceKind(result.attacker)].name;
+    const defenderName = PIECE_STATS[pieceKind(result.defender)].name;
 
     let title: string;
     let description: string;
@@ -561,16 +600,6 @@ export default function Home() {
 
     toast({ title, description });
 
-    // Win condition: a King died in this combat
-    const isKing = (p: PieceType) => p === 'K' || p === 'k';
-    if (result.outcome === 'capture' && isKing(result.defender)) {
-      // The defending King was captured -> the attacker's side wins
-      setWinner(isWhitePiece(result.attacker) ? 'white' : 'black');
-    } else if (result.outcome === 'repelled_destroyed' && isKing(result.attacker)) {
-      // The attacking King was destroyed -> the defender's side wins
-      setWinner(isWhitePiece(result.attacker) ? 'black' : 'white');
-    }
-
     setCombatResult(null);
     setIsAnimating(false);
   }, []);
@@ -579,6 +608,11 @@ export default function Home() {
     if (isAnimating || winner) return;
     if (embattled.includes(square)) {
       // Pieces locked in battle cannot move until one kills the other
+      e.preventDefault();
+      return;
+    }
+    // An eliminated faction (no King left) is frozen — its leftover pieces can't move.
+    if (!colorsWithKing(boardRef.current).has(pieceColor(piece))) {
       e.preventDefault();
       return;
     }
@@ -614,7 +648,7 @@ export default function Home() {
     }
 
     const targetPieces = board[targetSquare] || [];
-    const enemyPiece = targetPieces.find(p => isWhitePiece(p) !== isWhitePiece(piece));
+    const enemyPiece = targetPieces.find(p => pieceColor(p) !== pieceColor(piece));
 
     if (enemyPiece) {
       setIsAnimating(true);
@@ -644,8 +678,8 @@ export default function Home() {
         return newBoard;
       });
 
-      // Turn follows whoever just moved: after a white piece moves it's black's turn, and vice versa.
-      setCurrentTurn(isWhitePiece(piece) ? 'black' : 'white');
+      // Turn passes to the next faction that still has a King.
+      setCurrentTurn(nextActiveColor(pieceColor(piece), boardRef.current, numPlayersRef.current));
     }
 
     setDraggedPiece(null);
@@ -657,9 +691,9 @@ export default function Home() {
     if (!embattled.includes(square)) return;
 
     const pieces = boardRef.current[square] || [];
-    const wantWhite = currentTurn === 'white';
-    const attacker = pieces.find(p => isWhitePiece(p) === wantWhite);
-    const defender = pieces.find(p => isWhitePiece(p) !== wantWhite);
+    // The active faction's piece swings; the first opposing piece defends.
+    const attacker = pieces.find(p => pieceColor(p) === currentTurn);
+    const defender = pieces.find(p => pieceColor(p) !== currentTurn);
     if (!attacker || !defender) return;
 
     setIsAnimating(true);
@@ -675,20 +709,24 @@ export default function Home() {
     setDraggedPiece(null);
   }, []);
 
-  const regenerate = () => {
+  // Start a fresh game on a new board for the given theme & player count.
+  const startNewGame = (holeIntensity: number, players: number) => {
     if (combatTimeoutRef.current) {
       clearTimeout(combatTimeoutRef.current);
       combatTimeoutRef.current = null;
     }
-    const { active, board: newBoard, blocked: newBlocked } = generateBoard(currentTheme.holeIntensity);
+    const { active, board: newBoard } = generateBoard(holeIntensity, players);
     setActiveSquares(active);
     setBoard(newBoard);
-    setBlocked(newBlocked);
     setCurrentTurn('white');
     setCombatResult(null);
     setIsAnimating(false);
     setWinner(null);
     setEmbattled([]);
+  };
+
+  const regenerate = () => {
+    startNewGame(currentTheme.holeIntensity, numPlayers);
     toast({
       title: "New Battlefield",
       description: "A fresh randomized board has been generated.",
@@ -697,23 +735,21 @@ export default function Home() {
 
   const applyTheme = (id: string) => {
     const t = THEMES.find(x => x.id === id) || THEMES[0];
-    if (combatTimeoutRef.current) {
-      clearTimeout(combatTimeoutRef.current);
-      combatTimeoutRef.current = null;
-    }
-    const { active, board: newBoard, blocked: newBlocked } = generateBoard(t.holeIntensity);
     setTheme(id);
-    setActiveSquares(active);
-    setBoard(newBoard);
-    setBlocked(newBlocked);
-    setCurrentTurn('white');
-    setCombatResult(null);
-    setIsAnimating(false);
-    setWinner(null);
-    setEmbattled([]);
+    startNewGame(t.holeIntensity, numPlayers);
     toast({
       title: t.label,
       description: "A new battlefield rises in this realm.",
+    });
+  };
+
+  const changePlayers = (n: number) => {
+    if (n === numPlayers) return;
+    setNumPlayers(n);
+    startNewGame(currentTheme.holeIntensity, n);
+    toast({
+      title: `${n} Players`,
+      description: `New ${gridForPlayers(n)}×${gridForPlayers(n)} battlefield for ${n} factions.`,
     });
   };
 
@@ -723,15 +759,15 @@ export default function Home() {
     toast({ title: s ? s.label : 'Pieces', description: 'Army style updated.' });
   };
 
-  const squareSize = boardWidth / GRID_SIZE;
+  const squareSize = boardWidth / gridSize;
 
   // Thick black outline only on edges that face a "no-go" cell (a hole or off-grid),
   // never between two playable cells — so the board silhouette and holes read strongly
   // while the interior stays clean. Implemented as inset shadows so tiles stay aligned.
   const EDGE = Math.max(5, Math.round(squareSize * 0.09));
   const isLand = (rr: number, cc: number) =>
-    rr >= 0 && rr < GRID_SIZE && cc >= 0 && cc < GRID_SIZE &&
-    (activeSet.has(`${rr},${cc}`) || blockedSet.has(`${rr},${cc}`));
+    rr >= 0 && rr < gridSize && cc >= 0 && cc < gridSize &&
+    activeSet.has(`${rr},${cc}`);
   const edgeShadows = (r: number, c: number): string[] => {
     const parts: string[] = [];
     if (!isLand(r - 1, c)) parts.push(`inset 0 ${EDGE}px 0 0 #000`);
@@ -753,13 +789,17 @@ export default function Home() {
       {winner && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md">
           <Card className="glass-card p-10 text-white border-white/10 max-w-md w-full mx-4 text-center animate-in zoom-in-95 duration-300">
-            <img
-              src={pieceImage(pieceSet, winner === 'white' ? 'K' : 'k')}
-              alt="King"
-              className="w-28 h-28 mx-auto mb-4 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.7)]"
-            />
+            <div className="relative w-28 h-28 mx-auto mb-4">
+              <div className="absolute inset-0" style={{ background: `radial-gradient(circle, ${FACTIONS[winner].glow}, transparent 70%)` }} />
+              <img
+                src={pieceImage(pieceSet, makePiece(winner, 'K'))}
+                alt="King"
+                className="relative w-full h-full object-contain"
+                style={{ filter: [FACTIONS[winner].tint, 'drop-shadow(0 4px 12px rgba(0,0,0,0.7))'].filter(Boolean).join(' ') }}
+              />
+            </div>
             <h2 className="text-4xl font-display font-bold mb-2">
-              {winner === 'white' ? 'White' : 'Black'} Wins!
+              {FACTIONS[winner].label} Wins!
             </h2>
             <p className="text-white/60 mb-8">
               The enemy King has fallen. Victory is decided.
@@ -784,8 +824,8 @@ export default function Home() {
 
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1 text-center">
-                <img src={pieceImage(pieceSet, combatResult.attacker)} alt={PIECE_STATS[combatResult.attacker].name} className="w-20 h-20 mx-auto mb-2 object-contain drop-shadow-[0_3px_8px_rgba(0,0,0,0.7)]" />
-                <div className="text-sm text-white/60 mb-2">{PIECE_STATS[combatResult.attacker].name}</div>
+                <img src={pieceImage(pieceSet, combatResult.attacker)} alt={PIECE_STATS[pieceKind(combatResult.attacker)].name} className="w-20 h-20 mx-auto mb-2 object-contain" style={{ filter: [FACTIONS[pieceColor(combatResult.attacker)].tint, 'drop-shadow(0 3px 8px rgba(0,0,0,0.7))'].filter(Boolean).join(' ') }} />
+                <div className="text-sm text-white/60 mb-2">{FACTIONS[pieceColor(combatResult.attacker)].label} {PIECE_STATS[pieceKind(combatResult.attacker)].name}</div>
                 <div className="text-xs text-white/40 mb-3">Attack: ≤{combatResult.attackNeeded}</div>
                 <div className={`inline-flex items-center justify-center p-2 rounded-lg ${
                   combatResult.attackRoll <= combatResult.attackNeeded ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
@@ -800,8 +840,8 @@ export default function Home() {
               <div className="text-4xl text-white/30">⚔️</div>
 
               <div className="flex-1 text-center">
-                <img src={pieceImage(pieceSet, combatResult.defender)} alt={PIECE_STATS[combatResult.defender].name} className="w-20 h-20 mx-auto mb-2 object-contain drop-shadow-[0_3px_8px_rgba(0,0,0,0.7)]" />
-                <div className="text-sm text-white/60 mb-2">{PIECE_STATS[combatResult.defender].name}</div>
+                <img src={pieceImage(pieceSet, combatResult.defender)} alt={PIECE_STATS[pieceKind(combatResult.defender)].name} className="w-20 h-20 mx-auto mb-2 object-contain" style={{ filter: [FACTIONS[pieceColor(combatResult.defender)].tint, 'drop-shadow(0 3px 8px rgba(0,0,0,0.7))'].filter(Boolean).join(' ') }} />
+                <div className="text-sm text-white/60 mb-2">{FACTIONS[pieceColor(combatResult.defender)].label} {PIECE_STATS[pieceKind(combatResult.defender)].name}</div>
                 <div className="text-xs text-white/40 mb-3">Defense: ≤{combatResult.defenseNeeded}</div>
                 <div className={`inline-flex items-center justify-center p-2 rounded-lg ${
                   combatResult.defenseRoll <= combatResult.defenseNeeded ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
@@ -822,9 +862,9 @@ export default function Home() {
                   : 'text-green-400'
             }`}>
               {combatResult.outcome === 'capture'
-                ? `${PIECE_STATS[combatResult.attacker].name} captures!`
+                ? `${PIECE_STATS[pieceKind(combatResult.attacker)].name} captures!`
                 : combatResult.outcome === 'repelled_destroyed'
-                  ? `${PIECE_STATS[combatResult.defender].name} holds & destroys the attacker!`
+                  ? `${PIECE_STATS[pieceKind(combatResult.defender)].name} holds & destroys the attacker!`
                   : `Embattled! Both lock the square — fight on.`}
             </div>
           </Card>
@@ -845,35 +885,34 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="flex items-center gap-4 py-4 border-y border-white/10">
-              <button
-                type="button"
-                onClick={() => setCurrentTurn('white')}
-                title="Set turn to White"
-                data-testid="button-turn-white"
-                className={`p-3 rounded-xl transition-all duration-300 text-left cursor-pointer ${currentTurn === 'white' ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.3)]' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>
-                <div className="text-xs font-bold uppercase tracking-wider mb-1">White</div>
-                <div className="font-mono text-lg">Player 1</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentTurn(prev => prev === 'white' ? 'black' : 'white')}
-                title="Switch turn"
-                aria-label="Switch turn"
-                data-testid="button-turn-toggle"
-                className="flex-1 h-10 relative flex items-center justify-center cursor-pointer group">
-                <div className="absolute inset-x-0 top-1/2 h-px bg-white/10" />
-                <Swords className="relative w-4 h-4 text-white/40 group-hover:text-white/80 transition-colors bg-slate-900 px-1 box-content" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentTurn('black')}
-                title="Set turn to Black"
-                data-testid="button-turn-black"
-                className={`p-3 rounded-xl transition-all duration-300 text-left cursor-pointer ${currentTurn === 'black' ? 'bg-black text-white shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-white/20' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>
-                <div className="text-xs font-bold uppercase tracking-wider mb-1">Black</div>
-                <div className="font-mono text-lg">Player 2</div>
-              </button>
+            <div className="py-4 border-y border-white/10 space-y-2">
+              <div className="flex items-center gap-2 text-white/60 font-semibold uppercase tracking-wider text-xs">
+                <Swords className="w-3.5 h-3.5" /> Turn
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {playersInGame.map((color, i) => {
+                  const eliminated = !aliveColors.has(color);
+                  const isTurn = currentTurn === color;
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setCurrentTurn(color)}
+                      disabled={eliminated}
+                      title={`Set turn to ${FACTIONS[color].label}`}
+                      data-testid={`button-turn-${color}`}
+                      className={`relative p-3 rounded-xl text-left transition-all duration-300 ${isTurn ? 'ring-2 ring-white/40' : 'bg-white/5 hover:bg-white/10'} ${eliminated ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                      style={isTurn ? { background: FACTIONS[color].glow, boxShadow: `0 0 20px ${FACTIONS[color].glow}` } : undefined}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="inline-block w-3 h-3 rounded-full" style={{ background: FACTIONS[color].ring, boxShadow: '0 0 0 1px rgba(255,255,255,0.45)' }} />
+                        <span className={`text-xs font-bold uppercase tracking-wider ${eliminated ? 'line-through' : ''}`}>{FACTIONS[color].label}</span>
+                      </div>
+                      <div className="font-mono text-sm">{eliminated ? 'Eliminated' : `Player ${i + 1}`}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="space-y-2 text-xs">
@@ -915,6 +954,25 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
+              <div className="text-white/60 font-semibold uppercase tracking-wider text-xs">Players</div>
+              <div className="grid grid-cols-3 gap-2">
+                {[2, 3, 4].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => changePlayers(n)}
+                    className={`h-10 rounded-lg border text-sm font-semibold transition-all ${
+                      numPlayers === n ? 'border-amber-400 ring-2 ring-amber-400/50 bg-white/10 text-white' : 'border-white/10 hover:border-white/40 bg-white/5 text-white/60'
+                    }`}
+                    data-testid={`button-players-${n}`}
+                  >
+                    {n}P
+                  </button>
+                ))}
+              </div>
+              <div className="text-white/40 text-[11px]">{numPlayers} factions · {gridSize}×{gridSize} board</div>
+            </div>
+
+            <div className="space-y-2">
               <div className="text-white/60 font-semibold uppercase tracking-wider text-xs">Realm</div>
               <div className="grid grid-cols-2 gap-2">
                 {THEMES.map((t) => (
@@ -953,7 +1011,7 @@ export default function Home() {
                     data-testid={`button-pieceset-${s.id}`}
                   >
                     <img
-                      src={pieceImage(s.id, 'K')}
+                      src={pieceImage(s.id, makePiece('white', 'K'))}
                       alt={s.label}
                       className="h-12 w-12 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]"
                     />
@@ -974,31 +1032,15 @@ export default function Home() {
           <div
             className="grid w-full h-full"
             style={{
-              gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
-              gridTemplateRows: `repeat(${GRID_SIZE}, 1fr)`,
+              gridTemplateColumns: `repeat(${gridSize}, 1fr)`,
+              gridTemplateRows: `repeat(${gridSize}, 1fr)`,
               filter: 'drop-shadow(0 16px 20px rgba(0,0,0,0.85)) drop-shadow(0 2px 3px rgba(0,0,0,0.9))',
             }}
           >
-            {Array.from({ length: GRID_SIZE }).map((_, r) =>
-              Array.from({ length: GRID_SIZE }).map((_, c) => {
+            {Array.from({ length: gridSize }).map((_, r) =>
+              Array.from({ length: gridSize }).map((_, c) => {
                 const square = `${r},${c}`;
                 const isActive = activeSet.has(square);
-
-                if (blockedSet.has(square)) {
-                  return (
-                    <div
-                      key={square}
-                      className="relative overflow-hidden"
-                      style={{
-                        width: squareSize,
-                        height: squareSize,
-                        ...currentTheme.obstacleStyle,
-                        boxShadow: [currentTheme.obstacleStyle.boxShadow as string | undefined, ...edgeShadows(r, c)].filter(Boolean).join(', ') || undefined,
-                      }}
-                      data-testid={`blocked-${square}`}
-                    />
-                  );
-                }
 
                 if (!isActive) {
                   return <div key={square} style={{ width: squareSize, height: squareSize }} />;
@@ -1058,16 +1100,26 @@ export default function Home() {
                             }}
                             data-testid={`piece-${square}-${index}`}
                           >
+                            <div
+                              className="absolute inset-0 m-auto pointer-events-none"
+                              style={{
+                                width: '80%',
+                                height: '80%',
+                                borderRadius: '9999px',
+                                background: `radial-gradient(circle, ${FACTIONS[pieceColor(piece)].glow}, transparent 66%)`,
+                              }}
+                            />
                             <img
                               src={pieceImage(pieceSet, piece)}
-                              alt={PIECE_STATS[piece].name}
+                              alt={PIECE_STATS[pieceKind(piece)].name}
                               draggable={false}
-                              className="w-full h-full object-contain pointer-events-none select-none drop-shadow-[0_3px_5px_rgba(0,0,0,0.85)]"
+                              className="relative w-full h-full object-contain pointer-events-none select-none"
+                              style={{ filter: [FACTIONS[pieceColor(piece)].tint, 'drop-shadow(0 3px 5px rgba(0,0,0,0.85))'].filter(Boolean).join(' ') }}
                             />
                           </div>
                         </TooltipTrigger>
                         <TooltipContent data-testid={`tooltip-piece-${square}-${index}`}>
-                          {`${isWhitePiece(piece) ? 'White' : 'Black'} ${PIECE_STATS[piece].name}`}
+                          {`${FACTIONS[pieceColor(piece)].label} ${PIECE_STATS[pieceKind(piece)].name}`}
                         </TooltipContent>
                       </Tooltip>
                     ))}

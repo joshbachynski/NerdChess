@@ -245,6 +245,7 @@ let musicBus: GainNode | null = null;
 let musicTimer: number | null = null;
 let nextStepTime = 0;
 let stepIndex = 0;
+let autoStartHandler: (() => void) | null = null;
 
 try {
   musicEnabled = localStorage.getItem(MUSIC_KEY) === 'true';
@@ -339,6 +340,11 @@ export function startMusic(): void {
   if (!audio || musicPlaying) return;
   buildMusicBus(audio);
   if (!musicBus) return;
+  // Defensive: never let a stale interval survive into a new playback.
+  if (musicTimer != null) {
+    clearInterval(musicTimer);
+    musicTimer = null;
+  }
   musicPlaying = true;
   stepIndex = 0;
   nextStepTime = audio.currentTime + 0.1;
@@ -369,6 +375,8 @@ export function isMusicOn(): boolean {
 }
 
 export function toggleMusic(): boolean {
+  // An explicit toggle is authoritative — drop any pending auto-start.
+  clearAutoStart();
   musicEnabled = !musicEnabled;
   try {
     localStorage.setItem(MUSIC_KEY, musicEnabled ? 'true' : 'false');
@@ -380,15 +388,38 @@ export function toggleMusic(): boolean {
   return musicEnabled;
 }
 
+function clearAutoStart(): void {
+  if (typeof window === 'undefined' || !autoStartHandler) return;
+  window.removeEventListener('pointerdown', autoStartHandler);
+  window.removeEventListener('keydown', autoStartHandler);
+  autoStartHandler = null;
+}
+
 // If music was left on in a previous session, resume on the first user gesture
 // (browsers block audio until the user interacts).
 export function initMusicAutoStart(): void {
   if (typeof window === 'undefined' || !musicEnabled) return;
+  clearAutoStart(); // never stack listeners (StrictMode double-mount / re-init)
   const handler = () => {
-    window.removeEventListener('pointerdown', handler);
-    window.removeEventListener('keydown', handler);
+    clearAutoStart();
     if (musicEnabled) startMusic();
   };
-  window.addEventListener('pointerdown', handler, { once: true });
-  window.addEventListener('keydown', handler, { once: true });
+  autoStartHandler = handler;
+  window.addEventListener('pointerdown', handler);
+  window.addEventListener('keydown', handler);
+}
+
+// Hot Module Replacement: when this module is swapped during development, tear
+// down the old audio graph and its scheduler so a stale loop can't keep playing
+// alongside the freshly-loaded module (the classic "two songs at once" bug).
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    stopMusic();
+    clearAutoStart();
+    try {
+      ctx?.close();
+    } catch {
+      // ignore — context may already be closing
+    }
+  });
 }

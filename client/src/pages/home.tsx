@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Swords, Shuffle, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
+import { RotateCcw, Swords, Shuffle, Volume2, VolumeX, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { playSound, isMuted, toggleMuted } from "@/lib/sounds";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import meadowTile from "@assets/generated_images/tile_meadow.png";
 import scifiTile from "@assets/generated_images/tile_scifi.png";
@@ -429,6 +430,7 @@ export default function Home() {
   const [numPlayers, setNumPlayers] = useState<number>(initState.numPlayers);
   const [theme, setTheme] = useState<string>(initState.theme);
   const [pieceSet, setPieceSet] = useState<string>(initState.pieceSet);
+  const [muted, setMuted] = useState<boolean>(() => isMuted());
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Always-fresh snapshots for use inside delayed combat callbacks
@@ -573,11 +575,20 @@ export default function Home() {
       }
     }
 
+    // Combat-outcome audio: a kill (defender captured or attacker destroyed)
+    // plays "death", a stalemate plays the distinct "embattled" sound.
+    if (result.outcome === 'embattled') {
+      playSound('embattled');
+    } else {
+      playSound('death');
+    }
+
     // Decide victory & next turn from the post-combat board.
     const alive = colorsWithKing(newBoard);
     if (alive.size <= 1) {
       // Last faction with a King standing wins (fallback to the attacker if a tie somehow occurs).
       setWinner(alive.size === 1 ? Array.from(alive)[0] : attackerColor);
+      playSound('win');
     } else {
       setCurrentTurn(nextActiveColor(attackerColor, newBoard, numPlayersRef.current));
     }
@@ -651,6 +662,7 @@ export default function Home() {
     const enemyPiece = targetPieces.find(p => pieceColor(p) !== pieceColor(piece));
 
     if (enemyPiece) {
+      playSound('attack');
       setIsAnimating(true);
       const result = resolveCombat(piece, enemyPiece, fromSquare, targetSquare);
       setCombatResult(result);
@@ -659,6 +671,7 @@ export default function Home() {
         applyCombatResult(result);
       }, 2000);
     } else {
+      playSound('move');
       setBoard(prev => {
         const newBoard = { ...prev };
 
@@ -696,6 +709,7 @@ export default function Home() {
     const defender = pieces.find(p => pieceColor(p) !== currentTurn);
     if (!attacker || !defender) return;
 
+    playSound('attack');
     setIsAnimating(true);
     const result = resolveCombat(attacker, defender, square, square);
     setCombatResult(result);
@@ -757,6 +771,12 @@ export default function Home() {
     setPieceSet(id);
     const s = PIECE_SETS.find(x => x.id === id);
     toast({ title: s ? s.label : 'Pieces', description: 'Army style updated.' });
+  };
+
+  const handleToggleMute = () => {
+    const nowMuted = toggleMuted();
+    setMuted(nowMuted);
+    if (!nowMuted) playSound('move'); // brief cue that sound is back on
   };
 
   const squareSize = boardWidth / gridSize;
@@ -877,9 +897,22 @@ export default function Home() {
         <div className="fixed top-2 right-2 z-40 w-[22rem]">
           <Card className="glass-card p-4 space-y-4 text-white border-white/10 max-h-[calc(100vh-1rem)] overflow-y-auto">
             <div className="space-y-2">
-              <h1 className="text-3xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">
-                Nerd Chess
-              </h1>
+              <div className="flex items-start justify-between gap-2">
+                <h1 className="text-3xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">
+                  Nerd Chess
+                </h1>
+                <button
+                  type="button"
+                  onClick={handleToggleMute}
+                  title={muted ? 'Unmute sound effects' : 'Mute sound effects'}
+                  aria-label={muted ? 'Unmute sound effects' : 'Mute sound effects'}
+                  aria-pressed={muted}
+                  data-testid="button-mute-toggle"
+                  className="shrink-0 mt-1 p-2 rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                >
+                  {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                </button>
+              </div>
               <p className="text-white/60 font-light text-sm">
                 Dice combat on a randomized battlefield
               </p>
